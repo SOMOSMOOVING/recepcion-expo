@@ -1,0 +1,64 @@
+# Controles que corren solos antes de cada `git commit`.
+# Si algo falla, el commit no se hace y te muestra qué arreglar.
+# Instalación (una vez por compu):  pip install pre-commit
+# Activación (una vez por repo):    pre-commit install
+# Probar sobre todo el repo:        pre-commit run --all-files
+# Saltear en una emergencia:        git commit --no-verify
+
+repos:
+  # ---------- Generales ----------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files   # frena archivos de más de 5 MB (Excel, PDFs, dumps)
+        args: [--maxkb=5000]
+      - id: detect-private-key        # frena claves privadas pegadas en el código
+      - id: check-merge-conflict      # frena marcas <<<<<<< olvidadas
+      - id: check-yaml
+      - id: check-json
+        exclude: ^(tsconfig.*\.json|\.vscode/.*)$   # esos permiten comentarios
+
+  # ---------- Python ----------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9
+    hooks:
+      - id: ruff-check
+        args: [--fix]                 # arregla solo lo seguro (imports sin usar, etc.)
+
+  # ---------- Reglas propias (Mooving) ----------
+  - repo: local
+    hooks:
+      - id: sin-archivos-env
+        name: No subir archivos .env
+        language: fail
+        entry: "Este archivo tiene secretos: sacalo del commit y agregalo a .gitignore"
+        files: (^|/)\.env(\.[^/]*)?$
+        exclude: \.(example|sample|template)$
+
+      - id: sin-credenciales-en-codigo
+        name: No escribir credenciales en el código
+        language: pygrep
+        entry: (?i)\b(client_secret|password|passwd|api_key|apikey|secret_key|access_token)\b\s*[:=]\s*["'][^"'\s]{8,}["']
+        types_or: [python, javascript, jsx, ts, tsx, html]
+        exclude: (\.example|\.sample|tests?/)
+
+      - id: sin-service-role-en-frontend
+        name: No usar la service_role de Supabase en el frontend
+        language: pygrep
+        entry: (?i)service_role
+        types_or: [javascript, jsx, ts, tsx, html, vue, svelte]
+        exclude: ^(supabase/functions/|api/|server/|scripts/)
+
+      # ---------- JavaScript / TypeScript (necesita Node instalado) ----------
+      - id: oxlint
+        name: oxlint (JS/TS)
+        language: system
+        entry: npx --yes oxlint@1 --deny-warnings
+        types_or: [javascript, jsx, ts, tsx]
+
+      - id: tsc
+        name: Chequeo de tipos TypeScript
+        language: system
+        entry: bash -c 'if [ -f tsconfig.json ]; then npx --no-install tsc --noEmit; fi'
+        types_or: [ts, tsx]
+        pass_filenames: false

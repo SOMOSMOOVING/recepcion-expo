@@ -1,0 +1,23 @@
+# Configuración de ruff (linter de Python). Va en la raíz del repo.
+# Si el repo ya tiene pyproject.toml con [tool.ruff], copiá estas secciones ahí en vez de usar este archivo.
+
+target-version = "py311"
+line-length = 110
+
+[lint]
+select = [
+  "E", "F",   # errores básicos y variables/imports sin usar
+  "B",        # bugs comunes (argumentos mutables por defecto, etc.)
+  "S",        # seguridad (secretos, SQL armado con strings, requests sin timeout)
+  "BLE",      # except Exception demasiado amplios
+  "DTZ",      # fechas sin zona horaria
+  "PD",       # malas prácticas de pandas
+  "RET",      # returns confusos
+  "SIM",      # código que se puede simplificar
+]
+ignore = [
+  "E501",     # largo de línea (lo maneja el formateador)
+]
+
+[lint.per-file-ignores]
+"tests/**" = ["S101"]    # en tests se permite assert
