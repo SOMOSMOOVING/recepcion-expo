@@ -134,6 +134,77 @@ test(`${ANCHO} px · sin señal: si se cierra la página, al abrirla de nuevo si
   await cerrar(page);
 });
 
+/* Una acción que se queda sin señal mientras la persona ya cambió de pantalla
+   (por ejemplo tocó "¿No es tu empresa?" mientras esperaba): igual se guarda. */
+function sinSenalTarde() {
+  let soltar;
+  const espera = new Promise((ok) => { soltar = ok; });
+  return { soltar, responder: async () => { await espera; return SIN_RED; } };
+}
+
+test(`${ANCHO} px · sin señal: si cambia de pantalla mientras espera, el registro igual queda guardado`, async () => {
+  const tarde = sinSenalTarde();
+  const { page } = await abrir({
+    ancho: ANCHO, hash: '#t=' + TOKEN,
+    rpc: { expo_ver_invitado: (a) => enCurso({}, a.p_token === OTRO_TOKEN ? { razon_social: 'OTRO CLIENTE S.A.' } : {}), expo_registrar_visita: tarde.responder },
+  });
+  await page.click('#principal');
+  await page.evaluate((t) => { location.hash = 't=' + t; }, OTRO_TOKEN);
+  await page.waitForSelector('text=OTRO CLIENTE S.A.');
+  tarde.soltar();
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('expoCola') || '[]').length === 1);
+  const [guardado] = await cola(page);
+  assert.equal(guardado.fn, 'expo_registrar_visita');
+  assert.equal(guardado.args.p_token, TOKEN, 'se guardó para el cliente equivocado');
+  assert.match(await texto(page), /OTRO CLIENTE S\.A\./, 'pisó la pantalla del otro cliente');
+  await cerrar(page);
+});
+
+test(`${ANCHO} px · sin señal: si cambia de pantalla mientras espera, la corrección igual queda guardada`, async () => {
+  const tarde = sinSenalTarde();
+  const { page } = await abrir({
+    ancho: ANCHO, hash: '#t=' + TOKEN,
+    rpc: { expo_ver_invitado: () => enCurso({ visita_hoy: { llegada: new Date().toISOString(), cantidad: 2 } }), expo_corregir_cantidad: tarde.responder },
+  });
+  await page.click('#corregir');
+  await page.click('input[value="4"]');
+  await page.click('#principal');
+  await page.click('#cancelar', { force: true });   // se va de la pantalla mientras espera
+  tarde.soltar();
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('expoCola') || '[]').length === 1);
+  assert.equal((await cola(page))[0].args.p_cantidad, 4);
+  await cerrar(page);
+});
+
+test(`${ANCHO} px · sin señal: si cambia de pantalla mientras espera, la confirmación igual queda guardada`, async () => {
+  const tarde = sinSenalTarde();
+  const { page } = await abrir({ ancho: ANCHO, hash: '#t=' + TOKEN, rpc: { expo_ver_invitado: () => previa(), expo_confirmar: tarde.responder } });
+  await page.click('#principal');
+  await page.evaluate(() => { location.hash = 'buscar'; });
+  await page.waitForSelector('text=Escaneá el QR del cartel de la entrada');
+  tarde.soltar();
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('expoCola') || '[]').length === 1);
+  assert.deepEqual((await cola(page))[0].args, { p_token: TOKEN, p_cantidad: 2, p_va: true });
+  await cerrar(page);
+});
+
+test(`${ANCHO} px · un 404 (la función todavía no está en la base) no tira lo guardado: lo sigue reintentando`, async () => {
+  const guardado = {
+    id: 'x404', fn: 'expo_registrar_visita', creado: new Date().toISOString(),
+    args: { p_token: TOKEN, p_cantidad: 2, p_llegada: new Date(Date.now() - 600000).toISOString() },
+  };
+  const { page, llamadas } = await abrir({
+    ancho: ANCHO, hash: '#t=' + TOKEN, local: { expoCola: [guardado] },
+    rpc: { expo_ver_invitado: () => enCurso(), expo_registrar_visita: () => ({ http: 404 }) },
+  });
+  // la página lo manda sola al abrir: esperar ese intento y que procese la respuesta
+  while (!llamadas.some((l) => l.fn === 'expo_registrar_visita')) await new Promise((ok) => setTimeout(ok, 20));
+  await page.evaluate(() => new Promise((ok) => setTimeout(ok, 100)));
+  assert.equal((await cola(page)).length, 1, 'se descartó un registro por un error de configuración');
+  assert.match(await texto(page), /No hay señal, pero ya pueden pasar/);
+  await cerrar(page);
+});
+
 test(`${ANCHO} px · sin señal al abrir: con lo que se vio antes muestra la razón social; sin nada, deja registrarse igual`, async () => {
   const conCache = await abrir({
     ancho: ANCHO, hash: '#t=' + TOKEN, local: { ['expoInv:' + TOKEN]: enCurso() },
@@ -360,5 +431,120 @@ test(`${ANCHO} px · modo oscuro: data-theme sigue al celular y cambia de logo`,
   assert.equal(await page.getAttribute('html', 'data-theme'), 'dark');
   assert.equal(await page.isVisible('.mr-logo-oscuro'), true);
   assert.equal(await page.isVisible('.mr-logo-claro'), false);
+  await cerrar(page);
+});
+
+test(`${ANCHO} px · con el almacenamiento lleno, sin señal igual deja pasar y lo manda cuando vuelve`, async () => {
+  let haySenal = false;
+  const { page, llamadas, errores } = await abrir({
+    ancho: ANCHO, hash: '#t=' + TOKEN, almacenamiento: 'lleno',
+    rpc: { expo_ver_invitado: () => (haySenal ? enCurso() : SIN_RED), expo_registrar_visita: (a) => (haySenal ? registrada(a) : SIN_RED) },
+  });
+  await page.click('#principal');
+  await page.waitForSelector('text=No hay señal, pero ya pueden pasar');
+  haySenal = true;
+  await vuelveLaSenal(page);
+  await page.waitForSelector('text=Bienvenidos');
+  assert.equal(llamadas.filter((l) => l.fn === 'expo_registrar_visita').at(-1).args.p_cantidad, 2);
+  assert.deepEqual(errores, []);
+  await cerrar(page);
+});
+
+test(`${ANCHO} px · con el almacenamiento lleno, una confirmación sin señal sale cuando vuelve`, async () => {
+  let haySenal = false;
+  const { page, llamadas } = await abrir({
+    ancho: ANCHO, hash: '#t=' + TOKEN, almacenamiento: 'lleno',
+    rpc: { expo_ver_invitado: () => previa(), expo_confirmar: (a) => (haySenal ? previa({ confirmado: true, confirmado_cantidad: a.p_cantidad }) : SIN_RED) },
+  });
+  await page.click('#principal');
+  await page.waitForSelector('text=Reintentando enviar');
+  const intentos = llamadas.filter((l) => l.fn === 'expo_confirmar').length;
+  haySenal = true;
+  await vuelveLaSenal(page);
+  await page.waitForFunction(() => !document.querySelector('#app').textContent.includes('Reintentando'));
+  assert.ok(llamadas.filter((l) => l.fn === 'expo_confirmar').length > intentos, 'no la volvió a mandar');
+  await cerrar(page);
+});
+
+test(`${ANCHO} px · registrado con señal (o por la cola), al reabrir sin señal ya figura registrado con esa cantidad`, async () => {
+  for (const [token, conSenalAlRegistrar] of [[TOKEN, true], [OTRO_TOKEN, false]]) {
+    let haySenal = true;
+    const { page } = await abrir({
+      ancho: ANCHO, hash: '#t=' + token,
+      rpc: {
+        expo_ver_invitado: () => (haySenal ? enCurso() : SIN_RED),
+        expo_registrar_visita: (a) => (haySenal ? registrada(a) : SIN_RED),
+      },
+    });
+    await page.waitForSelector('#principal');
+    await page.click('input[value="3"]');
+    if (!conSenalAlRegistrar) haySenal = false;
+    await page.click('#principal');
+    if (!conSenalAlRegistrar) {
+      await page.waitForSelector('text=No hay señal, pero ya pueden pasar');
+      haySenal = true;
+      await vuelveLaSenal(page);
+    }
+    await page.waitForSelector('text=Bienvenidos');
+    haySenal = false;   // adentro de la expo, sin señal, vuelve a abrir el link
+    await page.reload();
+    await page.waitForSelector('text=Ya están registrados hoy');
+    assert.match(await texto(page), /3 personas/, conSenalAlRegistrar ? 'directo' : 'por la cola');
+    assert.equal(await page.$('input[type=radio]'), null, 'ofrece registrarse otra vez: la cantidad nueva se perdería');
+    await cerrar(page);
+  }
+});
+
+test(`${ANCHO} px · una corrección vieja que la cola ya mandó llega antes que la nueva (no la pisa)`, async () => {
+  const llegada = new Date(Date.now() - 600000).toISOString();
+  const vieja = { id: 'vieja', fn: 'expo_corregir_cantidad', creado: llegada, args: { p_token: TOKEN, p_cantidad: 3 } };
+  let soltar;
+  const demorada = new Promise((ok) => { soltar = ok; });
+  const aplicadas = [];
+  const { page } = await abrir({
+    ancho: ANCHO, hash: '#t=' + TOKEN, local: { expoCola: [vieja] },
+    rpc: {
+      expo_ver_invitado: () => enCurso({ visita_hoy: { llegada, cantidad: 2 } }),
+      expo_corregir_cantidad: async (a) => {
+        if (a.p_cantidad === 3) await demorada;   // la red la demora
+        aplicadas.push(a.p_cantidad);
+        return { dia: hoy(), llegada, cantidad: a.p_cantidad };
+      },
+    },
+  });
+  await page.waitForRequest((r) => r.url().endsWith('/rpc/expo_corregir_cantidad'));   // la vieja, en camino
+  await page.click('#corregir');
+  await page.click('input[value="4"]');
+  await page.click('#principal');
+  await page.waitForTimeout(300);
+  soltar();
+  await page.waitForSelector('text=4 personas');
+  assert.deepEqual(aplicadas, [3, 4], 'la vieja llegó después y pisó la nueva');
+  await cerrar(page);
+});
+
+test(`${ANCHO} px · un "no vamos" que la cola ya mandó llega antes que el "sí vamos" de después (no lo pisa)`, async () => {
+  const novamos = { id: 'novamos', fn: 'expo_confirmar', creado: new Date().toISOString(), args: { p_token: TOKEN, p_cantidad: null, p_va: false } };
+  let soltar;
+  const demorado = new Promise((ok) => { soltar = ok; });
+  const aplicadas = [];
+  const { page } = await abrir({
+    ancho: ANCHO, hash: '#t=' + TOKEN, local: { expoCola: [novamos] },
+    rpc: {
+      expo_ver_invitado: () => previa(),
+      expo_confirmar: async (a) => {
+        if (!a.p_va) await demorado;   // la red lo demora
+        aplicadas.push(a.p_va);
+        return previa({ confirmado: a.p_va, confirmado_cantidad: a.p_cantidad });
+      },
+    },
+  });
+  await page.waitForRequest((r) => r.url().endsWith('/rpc/expo_confirmar'));   // el "no vamos", en camino
+  await page.click('#sivamos');
+  await page.click('#principal');
+  await page.waitForTimeout(300);
+  soltar();
+  await page.waitForSelector('text=Listo, los esperamos');
+  assert.deepEqual(aplicadas, [false, true], 'el "no vamos" llegó después y pisó el "sí vamos"');
   await cerrar(page);
 });

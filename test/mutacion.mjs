@@ -22,10 +22,12 @@ import { archivosMigracion } from './db.mjs';
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // Del SQL se muta la última migración; las anteriores corren tal cual (ver
-// db.mjs). De la página, el index.html (lo sirve test/navegador.mjs).
+// db.mjs). De la página, el index.html y el sw.js (los sirve
+// test/navegador.mjs).
 const ARCHIVOS = {
   sql: { ruta: archivosMigracion().at(-1), variable: 'EXPO_SQL' },
   index: { ruta: join(RAIZ, 'index.html'), variable: 'EXPO_INDEX' },
+  sw: { ruta: join(RAIZ, 'sw.js'), variable: 'EXPO_SW' },
 };
 for (const a of Object.values(ARCHIVOS)) a.original = readFileSync(a.ruta, 'utf8');
 
@@ -46,6 +48,12 @@ const MUTACIONES = [
   { nombre: 'seguridad: no sacarle las funciones al anónimo', prueba: 'seguridad',
     espera: 'el anónimo solo puede ejecutar las funciones públicas',
     buscar: `execute format('revoke all on function %s from public, anon, authenticated', f);`, poner: '' },
+  { nombre: 'seguridad: la verificación no frena por funciones de más', prueba: 'seguridad', verificacion: true,
+    espera: 'la verificación de la migración frena',
+    buscar: `    raise exception 'VERIFICACIÓN: el anónimo puede ejecutar funciones que no son públicas: %', hay;`, poner: '' },
+  { nombre: 'seguridad: la verificación no mira todos los permisos de las tablas', prueba: 'seguridad', verificacion: true,
+    espera: 'la verificación de la migración frena',
+    buscar: `'select, insert, update, delete, truncate, references, trigger'`, poner: `'select'` },
   { nombre: 'seguridad: vincular sin chequear es_admin', prueba: 'seguridad',
     espera: 'vincular, marcar y cambiar la clave: solo recepción',
     buscar: `  if not public.es_admin() then
@@ -375,9 +383,9 @@ mqOscuro.addEventListener`, poner: `mqOscuro.addEventListener` },
   { nombre: 'página: el alta no manda clave para no duplicar', archivo: 'index', prueba: 'cartel-pantalla',
     espera: 'alta rápida: pide nombre y empresa',
     buscar: `p_clave: crypto.randomUUID(),`, poner: `p_clave: null,` },
-  { nombre: 'página: el alta sin señal frena en vez de guardar', archivo: 'index', prueba: 'cartel-pantalla',
-    espera: 'alta rápida sin señal',
-    buscar: `    const id = encolar("expo_alta_rapida", args);`, poner: `    return pantallaError(e);` },
+  { nombre: 'página: el alta sin señal frena en vez de dejar pasar', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'alta rápida sin señal: deja pasar',
+    buscar: `    if (item && vistaN === vista) esperarAlta(item);`, poner: `    if (vistaN === vista) pantallaError(e);` },
   { nombre: 'página: el alta deja pasar sin nombre', archivo: 'index', prueba: 'cartel-pantalla',
     espera: 'alta rápida: pide nombre y empresa',
     buscar: `const faltaNombre = nombre.length < MIN_LARGO_NOMBRE,`, poner: `const faltaNombre = false,` },
@@ -424,7 +432,7 @@ mqOscuro.addEventListener`, poner: `mqOscuro.addEventListener` },
   if (!claveCartel()) return pantallaSinClaveCartel();`, poner: `function pantallaBuscar() {` },
   { nombre: 'página: después de un rechazo el botón del alta queda trabado', archivo: 'index', prueba: 'cartel-pantalla',
     espera: 'alta rápida que la base rechaza',
-    buscar: `      liberar(boton, "Registrarme · " + cuantos(n));`, poner: `` },
+    buscar: `    liberar(boton, "Registrarme · " + cuantos(n));`, poner: `` },
   { nombre: 'página: la versión de la app no es la del service worker', archivo: 'index', prueba: 'app',
     espera: 'el service worker tiene la misma versión',
     buscar: `const APP_VERSION = "`, poner: `const APP_VERSION = "otra-` },
@@ -438,7 +446,7 @@ mqOscuro.addEventListener`, poner: `mqOscuro.addEventListener` },
     buscar: ".concat(mio ? [\"vos\"] : []);", poner: ".concat(mio ? [\"vos\"] : []).concat(p.vendedor ? [p.vendedor] : []);" },
   { nombre: "equipo: \"Me anoto\" no manda quién es", archivo: 'index', prueba: 'recorrido-pantalla',
     espera: "\"Me anoto\": se ve en el acto",
-    buscar: "const args = { p_clave: eq.clave, p_equipo: eq.yo.id, p_visita: visita };", poner: "const args = { p_clave: eq.clave, p_equipo: null, p_visita: visita };" },
+    buscar: "const args = { p_equipo: eq.yo.id, p_visita: visita };", poner: "const args = { p_equipo: null, p_visita: visita };" },
   { nombre: "equipo: la razón social de la tarjeta sin escapar", archivo: 'index', prueba: 'recorrido-pantalla',
     espera: "nombres y datos de la base escapados",
     buscar: "<h3 class=\"mr-presente-razon\">${escH(p.razon_social)}</h3>", poner: "<h3 class=\"mr-presente-razon\">${p.razon_social}</h3>" },
@@ -462,7 +470,7 @@ mqOscuro.addEventListener`, poner: `mqOscuro.addEventListener` },
     buscar: "claveDelLink(r.cartel, CLAVE_CARTEL, \"#buscar\");", poner: "guardarLocal(CLAVE_CARTEL, r.cartel);" },
   { nombre: "página: un \"no vamos\" viejo de la cola pisa la decisión nueva", archivo: 'index', prueba: "checkin",
     espera: "no pisa el \"sí vamos\" de después",
-    buscar: "  descartarPendientes(delMismoCliente(\"expo_confirmar\", token));   // lo último que se decidió es lo que vale", poner: "" },
+    buscar: "  descartarPendientes(misma);   // lo último que se decidió es lo que vale…", poner: "" },
   { nombre: "página: no parte la razón social en el primer \" - \"", archivo: 'index', prueba: "anchos",
     espera: "razón social con guion",
     buscar: "  const partes = partirRazon(texto);", poner: "  const partes = [texto];" },
@@ -505,12 +513,62 @@ mqOscuro.addEventListener`, poner: `mqOscuro.addEventListener` },
   { nombre: "equipo: \"▾\" borra a la persona elegida", archivo: 'index', prueba: "recorrido-pantalla",
     espera: "\"Volver\" deja la misma persona",
     buscar: "  $(\"#quiensoy\").onclick = () => pantallaQuienSos();", poner: "  $(\"#quiensoy\").onclick = () => { borrarLocal(YO); pantallaQuienSos(); };" },
+  { nombre: "página: el registro sin señal se pierde si cambia de pantalla", archivo: 'index', prueba: "checkin",
+    espera: "el registro igual queda guardado",
+    buscar: "    if (e instanceof ErrorRed) {\n      const id = encolar(\"expo_registrar_visita\"", poner: "    if (vistaN !== vista) return;\n    if (e instanceof ErrorRed) {\n      const id = encolar(\"expo_registrar_visita\"" },
+  { nombre: "página: la corrección sin señal se pierde si cambia de pantalla", archivo: 'index', prueba: "checkin",
+    espera: "la corrección igual queda guardada",
+    buscar: "      const id = encolar(\"expo_corregir_cantidad\", { p_token: token, p_cantidad: n });   // siempre (ver registrar)\n      if (vistaN !== vista) return;", poner: "      if (vistaN !== vista) return;\n      const id = encolar(\"expo_corregir_cantidad\", { p_token: token, p_cantidad: n });" },
+  { nombre: "página: la confirmación sin señal se pierde si cambia de pantalla", archivo: 'index', prueba: "checkin",
+    espera: "la confirmación igual queda guardada",
+    buscar: "    const id = encolar(\"expo_confirmar\", args);   // siempre (ver registrar)\n    if (vistaN !== vista) return;", poner: "    if (vistaN !== vista) return;\n    const id = encolar(\"expo_confirmar\", args);" },
+  { nombre: "página: un 404 se toma como rechazo y se tira lo guardado", archivo: 'index', prueba: "checkin",
+    espera: "un 404",
+    buscar: "    const aProposito = motivo.startsWith(\"expo_\") && !PASAJEROS.has(motivo);", poner: "    const aProposito = !PASAJEROS.has(motivo);" },
+  { nombre: "página: sin almacenamiento, lo que no se pudo guardar se pierde", archivo: 'index', prueba: "checkin",
+    espera: "con el almacenamiento lleno, sin señal igual deja pasar",
+    buscar: "JSON.parse(enMemoria.has(clave) ? enMemoria.get(clave) : localStorage.getItem(clave))", poner: "JSON.parse(localStorage.getItem(clave))" },
+  { nombre: "página: la clave del link sale de la URL aunque no se pudo guardar", archivo: 'index', prueba: "cartel-pantalla",
+    espera: "con el almacenamiento bloqueado",
+    buscar: "  if (TOKEN_RE.test(valor) && !guardarLocal(nombre, valor)) return;", poner: "  if (TOKEN_RE.test(valor)) guardarLocal(nombre, valor);" },
+  { nombre: "página: con la clave vencida lo pendiente se tira", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "recepción cambió la clave",
+    buscar: "        if (CLAVE_VENCIDA.has(e.message)) { enPausa.add(item.id); continue; }\n", poner: "" },
+  { nombre: "página: el link nuevo no manda lo que esperaba la clave", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "recepción cambió la clave",
+    buscar: "  history.replaceState(null, \"\", location.pathname + location.search + destino);\n  procesarCola();", poner: "  history.replaceState(null, \"\", location.pathname + location.search + destino);" },
+  { nombre: "página: el alta se guarda recién cuando falla", archivo: 'index', prueba: "cartel-pantalla",
+    espera: "queda guardada ANTES de mandarla",
+    buscar: "  const id = encolar(\"expo_alta_rapida\", args);\n  ultimaBusqueda = \"\";", poner: "  const id = \"en-memoria\";\n  ultimaBusqueda = \"\";\n  setTimeout(() => encolar(\"expo_alta_rapida\", args), 8000);" },
+  { nombre: "página: al recargar, el alta que espera no se muestra", archivo: 'index', prueba: "cartel-pantalla",
+    espera: "sin señal y recarga",
+    buscar: "function pantallaAlta() {\n  if (!claveCartel()) return pantallaSinClaveCartel();\n  if (altaPendiente()) return esperarAlta(altaPendiente());\n", poner: "function pantallaAlta() {\n  if (!claveCartel()) return pantallaSinClaveCartel();\n" },
+  { nombre: "página: al volver al buscador, el alta que espera no se muestra", archivo: 'index', prueba: "cartel-pantalla",
+    espera: "si vuelve al buscador mientras espera, ve la que espera",
+    buscar: "function pantallaBuscar() {\n  if (!claveCartel()) return pantallaSinClaveCartel();\n  if (altaPendiente()) return esperarAlta(altaPendiente());\n", poner: "function pantallaBuscar() {\n  if (!claveCartel()) return pantallaSinClaveCartel();\n" },
+  { nombre: "página: registrado con señal no queda en lo guardado", archivo: 'index', prueba: "checkin",
+    espera: "al reabrir sin señal ya figura registrado",
+    buscar: "    recordarVisita(token, r);\n    if (vistaN !== vista) return;", poner: "    if (vistaN !== vista) return;" },
+  { nombre: "página: registrado por la cola no queda en lo guardado", archivo: 'index', prueba: "checkin",
+    espera: "al reabrir sin señal ya figura registrado",
+    buscar: "      if (!error && VISITA_DEL_CLIENTE.includes(item.fn)) recordarVisita(item.args.p_token, resultado);\n", poner: "" },
+  { nombre: "página: la corrección nueva no espera a la vieja en camino", archivo: 'index', prueba: "checkin",
+    espera: "una corrección vieja que la cola ya mandó",
+    buscar: "    await esperarEnVuelo(misma);   // la vieja que ya salió llega antes que esta\n", poner: "" },
+  { nombre: "página: el sí vamos no espera al no vamos en camino", archivo: 'index', prueba: "checkin",
+    espera: "llega antes que el \"sí vamos\"",
+    buscar: "  await esperarEnVuelo(misma);  // …y la vieja que ya salió llega antes que esta\n", poner: "" },
+  { nombre: "sw: borra los cachés de la app de pedidos", archivo: 'sw', prueba: "service-worker",
+    espera: "borra solo sus versiones viejas",
+    buscar: "claves.filter(k => k.startsWith(PREFIJO) && k !== CACHE)", poner: "claves.filter(k => k !== CACHE)" },
   { nombre: 'recorrido: cambiar la clave no invalida la vieja', prueba: 'recorrido',
     espera: 'la vieja deja de andar en el acto',
     buscar: `     set clave_equipo_hash = public.expo__hash_clave(clave)
    where estado <> 'cerrada';`, poner: `     set clave_equipo_hash = clave_equipo_hash
    where estado <> 'cerrada';` },
 ];
+
+const VERIFICACION = /do \$verificacion\$[\s\S]*?\$verificacion\$;/;
 
 const NODE_TEST = ['--test', '--test-force-exit', '--test-timeout=60000'];
 
@@ -535,12 +593,17 @@ for (const m of MUTACIONES.filter((x) => !filtro || x.nombre.includes(filtro))) 
     rotas++;
     continue;
   }
-  const mutado = join(dir, 'mutado' + (m.archivo === 'index' ? '.html' : '.sql'));
+  const esSql = !m.archivo || m.archivo === 'sql';
+  const mutado = join(dir, 'mutado' + (esSql ? '.sql' : m.archivo === 'sw' ? '.js' : '.html'));
   // con una función: un texto de reemplazo con $$ (cierre de función SQL) se
   // volvería $ si se pasara como string
-  writeFileSync(mutado, archivo.original.replace(m.buscar, () => m.poner));
+  let texto = archivo.original.replace(m.buscar, () => m.poner);
+  // El bloque de VERIFICACIÓN del final frena la migración si algo quedó
+  // abierto: se saca para medir a los tests, salvo cuando lo mutado es él.
+  if (esSql && !m.verificacion) texto = texto.replace(VERIFICACION, '');
+  writeFileSync(mutado, texto);
 
-  const error = m.archivo === 'index' ? null : carga(mutado);
+  const error = esSql ? carga(mutado) : null;
   if (error) {
     console.log(`?  ${m.nombre}: el SQL mutado no carga (${error.trim()})`);
     rotas++;

@@ -332,3 +332,30 @@ test(`${ANCHO} px · nombres y datos de la base escapados en las tarjetas y en "
   assert.equal(await page.evaluate(() => window.__xss), undefined);
   await cerrar(page);
 });
+
+test(`${ANCHO} px · un "Me anoto" sin enviar y recepción cambió la clave: no se tira, sale con el link nuevo`, async () => {
+  const NUEVA = 'fedcba9876543210fedcba9876543210';
+  let senal = true, claveQueVale = CLAVE;
+  const b = base([TREBOL, KALU], () => senal);
+  const conClave = (f) => (a, n) => (senal && a.p_clave !== claveQueVale ? { error: 'expo_clave_invalida' } : f(a, n));
+  const rpc = Object.fromEntries(Object.entries(b.rpc).map(([k, f]) => [k, conClave(f)]));
+  const { page, llamadas } = await abrir({ ancho: ANCHO, hash: '#recorrido', local: comoSofia, rpc });
+  await page.waitForSelector('.mr-presente');
+  senal = false;
+  await page.click(`[data-anotar="${KALU.visita_id}"]`);
+  await page.waitForSelector('text=Sin conexión');
+  assert.equal((await cola(page))[0].args.p_clave, undefined, 'la clave del link quedó guardada en la cola');
+
+  claveQueVale = NUEVA;   // recepción generó un link nuevo
+  senal = true;
+  const rechazada = respuestaDe(page, 'expo_anotarme');
+  await vuelveLaSenal(page);
+  await rechazada;
+  assert.deepEqual(await fnsEnCola(page), ['expo_anotarme'], 'se tiró el "Me anoto" por la clave vieja');
+
+  await page.evaluate((c) => { location.hash = 'equipo=' + c; }, NUEVA);   // abre el link nuevo
+  await colaVacia(page);
+  assert.equal(llamadas.filter((l) => l.fn === 'expo_anotarme').at(-1).args.p_clave, NUEVA);
+  assert.ok(b.datos[1].recorrido.some((r) => r.id === SOFIA.id), 'no quedó anotada en la base');
+  await cerrar(page);
+});

@@ -3,7 +3,8 @@
 //
 // · El navegador es el que ya está instalado (playwright-core no baja ninguno).
 //   EXPO_NAVEGADOR elige: msedge (por defecto) o chrome.
-// · EXPO_INDEX reemplaza el index.html servido: lo usa la prueba de mutación.
+// · EXPO_INDEX y EXPO_SW reemplazan el index.html y el sw.js servidos: los usa
+//   la prueba de mutación.
 // · Cada test dice a qué ancho mira (abrir({ ancho })).
 import { chromium } from 'playwright-core';
 import { createServer } from 'node:http';
@@ -14,6 +15,7 @@ import { after } from 'node:test';
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const INDEX = process.env.EXPO_INDEX || join(RAIZ, 'index.html');
+const SW = process.env.EXPO_SW || join(RAIZ, 'sw.js');
 export const ANCHOS = [320, 360, 375, 390, 412];
 
 const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.png': 'image/png', '.gif': 'image/gif' };
@@ -24,8 +26,8 @@ async function arrancar() {
   if (origen) return;
   servidor = createServer((req, res) => {
     const ruta = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    const archivo = ruta === '/' || ruta === '/index.html' ? INDEX : normalize(join(RAIZ, ruta));
-    if ((!archivo.startsWith(RAIZ) && archivo !== INDEX) || !existsSync(archivo)) { res.writeHead(404); return res.end(); }
+    const archivo = ruta === '/' || ruta === '/index.html' ? INDEX : ruta === '/sw.js' ? SW : normalize(join(RAIZ, ruta));
+    if ((!archivo.startsWith(RAIZ) && archivo !== INDEX && archivo !== SW) || !existsSync(archivo)) { res.writeHead(404); return res.end(); }
     res.writeHead(200, { 'Content-Type': TIPOS[extname(archivo)] || 'application/octet-stream' });
     res.end(readFileSync(archivo));
   });
@@ -75,15 +77,20 @@ export function previa(extra = {}) {
 }
 
 /* Abre la app al ancho indicado (obligatorio: el nombre del test lo dice).
-   rpc: { nombreFuncion: (args, n) => respuesta | SIN_RED | { error: 'expo_...' } }
+   rpc: { nombreFuncion: (args, n) => respuesta | SIN_RED | { error: 'expo_...' } | { http: 404 } }
    reloj: true para adelantar el tiempo desde el test (lo que se actualiza solo).
+   sw: true deja andar el service worker (se abre en localhost: lo necesita).
+   almacenamiento: 'lleno' (no deja guardar) o 'bloqueado' (ni leer: el
+   navegador de algunos lectores de QR).
+   antes(page): corre en el mismo sitio antes de abrir la app (por ejemplo,
+   para dejar cachés de otra app).
    Devuelve la página y las llamadas que hizo ({ fn, args }). */
-export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = null, oscuro = false, reloj = false } = {}) {
+export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = null, oscuro = false, reloj = false, sw = false, antes = null, almacenamiento = null } = {}) {
   if (!ancho) throw new Error("abrir(): falta el ancho (cada test dice a qué ancho mira)");
   await arrancar();
   const contexto = await navegador.newContext({
     viewport: { width: ancho, height: alto },
-    serviceWorkers: 'block',
+    serviceWorkers: sw ? 'allow' : 'block',
     locale: 'es-AR',
     timezoneId: 'America/Argentina/Buenos_Aires',
     colorScheme: oscuro ? 'dark' : 'light',
@@ -101,11 +108,20 @@ export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = nu
     const manejador = rpc[fn];
     const respuesta = manejador ? await manejador(args, veces[fn]) : { error: 'sin_manejador_' + fn };
     if (respuesta === SIN_RED) return ruta.abort('internetdisconnected');
+    if (respuesta && respuesta.http) {   // un error de configuración (404 la función no está, 403…)
+      return ruta.fulfill({ status: respuesta.http, contentType: 'application/json', body: JSON.stringify({ code: 'PGRST202', message: respuesta.mensaje || 'Could not find the function' }) });
+    }
     if (respuesta && respuesta.error) {
       return ruta.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ code: 'P0001', message: respuesta.error }) });
     }
     return ruta.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(respuesta) });
   });
+  if (almacenamiento) {
+    await contexto.addInitScript((modo) => {
+      if (modo === 'lleno') Storage.prototype.setItem = () => { throw new DOMException('lleno', 'QuotaExceededError'); };
+      else Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('bloqueado', 'SecurityError'); } });
+    }, almacenamiento);
+  }
   if (local) {
     await contexto.addInitScript((datos) => {
       if (sessionStorage.getItem('__sembrado')) return;
@@ -117,8 +133,13 @@ export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = nu
   page.setDefaultTimeout(10000);   // nada tarda más de 1–2 s: si falla, que no espere 30
   const errores = [];
   page.on('pageerror', (e) => errores.push(e.message));
-  await page.goto(`${origen}/index.html${hash}`);
-  return { page, llamadas, errores, contexto, origen };
+  const sitio = sw ? origen.replace('127.0.0.1', 'localhost') : origen;
+  if (antes) {
+    await page.goto(`${sitio}/assets/logo-claro.png`);   // el mismo sitio, sin la app
+    await antes(page);
+  }
+  await page.goto(`${sitio}/index.html${hash}`);
+  return { page, llamadas, errores, contexto, origen: sitio };
 }
 
 // Una visita como la devuelve expo_presentes (n distingue una de otra; las de n más alto llegaron antes).

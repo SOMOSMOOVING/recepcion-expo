@@ -413,22 +413,31 @@ function escH(s) {
     .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+/* Si el celular no deja guardar (almacenamiento lleno, o bloqueado en el
+   navegador del lector de QR), lo que no se pudo guardar queda en memoria
+   mientras la página siga abierta: la cola sin señal y las claves de los
+   links siguen andando. guardarLocal dice si quedó guardado de verdad. */
+const enMemoria = new Map();   // clave → JSON que no se pudo guardar
 function leerLocal(clave) {
-  try { return JSON.parse(localStorage.getItem(clave)); } catch (e) { return null; }
+  try { return JSON.parse(enMemoria.has(clave) ? enMemoria.get(clave) : localStorage.getItem(clave)); } catch (e) { return null; }
 }
 function guardarLocal(clave, valor) {
-  try { localStorage.setItem(clave, JSON.stringify(valor)); } catch (e) { /* modo privado: sigue sin guardar */ }
+  const json = JSON.stringify(valor);
+  try { localStorage.setItem(clave, json); enMemoria.delete(clave); return true; } catch (e) { enMemoria.set(clave, json); return false; }
 }
 function borrarLocal(clave) {
-  try { localStorage.removeItem(clave); } catch (e) { /* idem */ }
+  try { localStorage.removeItem(clave); enMemoria.delete(clave); } catch (e) { enMemoria.set(clave, "null"); }
 }
 
 /* Las claves de los links (cartel, equipo): se guardan en el celular y salen
-   de la URL, así no quedan en capturas ni en el historial. */
+   de la URL, así no quedan en capturas ni en el historial. Si no se pudieron
+   guardar, quedan en la URL: recargar la página no las pierde. Lo que
+   esperaba una clave nueva en la cola sale ahora. */
 const leerClave = nombre => { const c = leerLocal(nombre); return TOKEN_RE.test(c || "") ? c : null; };
 function claveDelLink(valor, nombre, destino) {
-  if (TOKEN_RE.test(valor)) guardarLocal(nombre, valor);
+  if (TOKEN_RE.test(valor) && !guardarLocal(nombre, valor)) return;
   history.replaceState(null, "", location.pathname + location.search + destino);
+  procesarCola();
 }
 
 const personas = n => n === 1 ? "1 persona" : n + " personas";
@@ -462,8 +471,9 @@ const horario = t => `${horaCorta(t.desde)} a ${horaCorta(t.hasta)} h`;         
 const apertura = t => { const [h, m] = String(t).split(":"); return Number(h) + ":" + (m || "00"); }; // "9:00"
 
 /* ====== red: funciones RPC de Supabase ======
-   ErrorRed: no hubo respuesta (sin señal, tiempo agotado, servidor caído) o la
-   base dijo "ahora no, probá en un rato" → se reintenta.
+   ErrorRed: no hubo respuesta (sin señal, tiempo agotado, servidor caído), la
+   base dijo "ahora no, probá en un rato", o hay un problema de configuración
+   (404, 401, 403) → se reintenta.
    ErrorServidor: la base contestó que no (expo_...) → reintentar no lo arregla. */
 class ErrorRed extends Error {}
 class ErrorServidor extends Error {}
@@ -490,7 +500,11 @@ async function rpc(fn, args) {
   try { datos = await r.json(); } catch (e) { /* respuesta vacía */ }
   if (!r.ok) {
     const motivo = (datos && datos.message) || "error_" + r.status;
-    throw PASAJEROS.has(motivo) ? new ErrorRed(motivo) : new ErrorServidor(motivo);
+    // solo es un "no" definitivo lo que la base rechazó a propósito (expo_...).
+    // Un 404/401/403 (la función no está, la clave cambió, falta un permiso) es
+    // un problema de configuración que se arregla: lo guardado no se tira.
+    const aProposito = motivo.startsWith("expo_") && !PASAJEROS.has(motivo);
+    throw aProposito ? new ErrorServidor(motivo) : new ErrorRed(motivo);
   }
   return datos;
 }
@@ -510,6 +524,7 @@ const MENSAJES = {
   expo_visita_invalida: "Esa visita ya no está en la lista de hoy.",
   expo_no_anotado: "Para marcar el pedido, primero anotate con ese presente.",
   expo_equipo_invalido: "No figurás en el equipo activo. Pedile a recepción que te agregue.",
+  expo_clave_cartel_invalida: "Este QR ya no sirve: escaneá el del cartel de la entrada.",
 };
 const mensajeDe = e => MENSAJES[e && e.message] || "Algo salió mal. Pedí ayuda en la entrada.";
 
@@ -566,16 +581,45 @@ function alSalir(id, vista, hacer) {
   alEnviar[id] = (r, error) => { if (vistaN === vista) hacer(r, error); };
 }
 
+/* Salió el envío `id` (por la cola o directo): deja la cola y le avisa a la
+   pantalla que lo esperaba. */
+function salio(id, resultado, error = null) {
+  quitarDeCola(id);
+  const hacer = alEnviar[id];
+  delete alEnviar[id];
+  if (hacer) hacer(resultado, error);
+}
+
+/* Las claves de los links no se guardan en la cola: se ponen al enviar. Así,
+   si recepción cambió la clave y llegó el link nuevo, lo pendiente sale con
+   la clave de ahora. */
+function conClaves({ fn, args }) {
+  if (ACCIONES_EQUIPO.includes(fn)) return { ...args, p_clave: claveEquipo() };
+  if (fn === "expo_alta_rapida") return { ...args, p_clave_cartel: claveCartel() };
+  return args;
+}
+/* La clave del link dejó de valer: lo pendiente no se tira, espera el link nuevo. */
+const CLAVE_VENCIDA = new Set(["expo_clave_invalida", "expo_clave_cartel_invalida"]);
+
+/* Lo que la cola está mandando ahora. Una decisión nueva del cliente espera a
+   que llegue (ver esperarEnVuelo): si no, la vieja podría llegar después y pisarla. */
+let enVuelo = null, otraVuelta = false;
+async function esperarEnVuelo(cual) {
+  while (enVuelo && cual(enVuelo.item)) await enVuelo.promesa.catch(() => {});
+}
+
 async function procesarCola() {
-  if (procesando) return;
+  if (procesando) { otraVuelta = true; return; }   // al terminar da otra vuelta (por ejemplo, llegó una clave nueva)
   procesando = true;
+  otraVuelta = false;
   clearTimeout(reintento);
+  const enPausa = new Set();   // esperan una clave nueva
   try {
-    for (let cola = leerCola(); cola.length; cola = leerCola()) {
-      const item = cola[0];
+    for (let item; (item = leerCola().find(i => !enPausa.has(i.id)));) {
       let resultado, error = null;
       try {
-        resultado = await rpc(item.fn, item.args);
+        enVuelo = { item, promesa: rpc(item.fn, conClaves(item)) };
+        resultado = await enVuelo.promesa;
       } catch (e) {
         if (e instanceof ErrorRed) {
           reintento = setTimeout(procesarCola, espera);
@@ -583,19 +627,20 @@ async function procesarCola() {
           if (avisarSinRed) avisarSinRed();
           return;
         }
+        if (CLAVE_VENCIDA.has(e.message)) { enPausa.add(item.id); continue; }
         error = e;   // la base lo rechazó: reintentar no lo arregla
-        // queda anotado en el celular para revisar, sin las claves de los links
-        const { p_clave, p_clave_cartel, ...datos } = item.args;
-        guardarLocal(RECHAZADOS, (leerLocal(RECHAZADOS) || []).concat({ ...item, args: datos, error: e.message, cuando: new Date().toISOString() }));
+        // queda anotado en el celular para revisar (la cola no tiene las claves de los links)
+        guardarLocal(RECHAZADOS, (leerLocal(RECHAZADOS) || []).concat({ ...item, error: e.message, cuando: new Date().toISOString() }));
+      } finally {
+        enVuelo = null;
       }
-      quitarDeCola(item.id);
-      const hacer = alEnviar[item.id];
-      delete alEnviar[item.id];
-      if (hacer) hacer(resultado, error);
+      if (!error && VISITA_DEL_CLIENTE.includes(item.fn)) recordarVisita(item.args.p_token, resultado);
+      salio(item.id, resultado, error);
     }
     espera = REINTENTO_MIN_MS;
   } finally {
     procesando = false;
+    if (otraVuelta) procesarCola();
   }
 }
 window.addEventListener("online", () => { espera = REINTENTO_MIN_MS; procesarCola(); });
@@ -754,6 +799,15 @@ function alDiaDeHoy(d) {
   return actual;
 }
 
+/* Lo que la base confirmó (registro o corrección) queda en lo guardado: si
+   después se abre el link sin señal, ya figura registrado con esa cantidad. */
+const VISITA_DEL_CLIENTE = ["expo_registrar_visita", "expo_corregir_cantidad"];
+function recordarVisita(token, r) {
+  const d = alDiaDeHoy(leerLocal(CACHE_INV(token)));
+  if (!d || !d.edicion || !r || !r.llegada) return;   // nunca se vio con señal: no hay qué completar
+  guardarLocal(CACHE_INV(token), { ...d, visita_hoy: { llegada: r.llegada, cantidad: r.cantidad } });
+}
+
 async function abrirCliente(token) {
   if (!TOKEN_RE.test(token || "")) return pantallaInvalido();
   cargando();
@@ -851,13 +905,16 @@ async function registrar(n, boton) {
   const llegada = new Date().toISOString();   // la hora del celular, por si no hay señal
   try {
     const r = await rpc("expo_registrar_visita", { p_token: token, p_cantidad: n });
+    recordarVisita(token, r);
     if (vistaN !== vista) return;
     return r.nueva ? pantallaRegistrado(r) : pantallaYaRegistrado(r);
   } catch (e) {
-    if (vistaN !== vista) return;
-    if (!(e instanceof ErrorRed)) return pantallaError(e);
-    const id = encolar("expo_registrar_visita", { p_token: token, p_cantidad: n, p_llegada: llegada });
-    return esperarRegistro(leerCola().find(i => i.id === id));
+    // sin señal se guarda SIEMPRE, aunque ya se haya cambiado de pantalla
+    if (e instanceof ErrorRed) {
+      const id = encolar("expo_registrar_visita", { p_token: token, p_cantidad: n, p_llegada: llegada });
+      return vistaN === vista ? esperarRegistro(leerCola().find(i => i.id === id)) : procesarCola();
+    }
+    if (vistaN === vista) pantallaError(e);
   }
 }
 
@@ -920,14 +977,17 @@ function pantallaCorregir(actual, visita) {
     if (boton.disabled) return;
     const n = cantidad(), token = cli.token;
     ocupar(boton, "Guardando…");
-    descartarPendientes(delMismoCliente("expo_corregir_cantidad", token));
+    const misma = delMismoCliente("expo_corregir_cantidad", token);
+    descartarPendientes(misma);
+    await esperarEnVuelo(misma);   // la vieja que ya salió llega antes que esta
     try {
       const r = await rpc("expo_corregir_cantidad", { p_token: token, p_cantidad: n });
+      recordarVisita(token, r);
       if (vistaN === vista) pantallaYaRegistrado(r);
     } catch (e) {
+      if (!(e instanceof ErrorRed)) return vistaN === vista ? pantallaError(e) : undefined;
+      const id = encolar("expo_corregir_cantidad", { p_token: token, p_cantidad: n });   // siempre (ver registrar)
       if (vistaN !== vista) return;
-      if (!(e instanceof ErrorRed)) return pantallaError(e);
-      const id = encolar("expo_corregir_cantidad", { p_token: token, p_cantidad: n });
       const espera = pantallaYaRegistrado({ llegada: visita.llegada, cantidad: n }, true);
       alSalir(id, espera, (r, error) => error ? pantallaError(error) : pantallaYaRegistrado(r));
     }
@@ -958,7 +1018,9 @@ async function confirmar(va, n, boton) {
   ocupar(boton, va ? "Confirmando…" : "Avisando…");
   const vista = vistaN, token = cli.token;
   const args = { p_token: token, p_cantidad: va ? n : null, p_va: va };
-  descartarPendientes(delMismoCliente("expo_confirmar", token));   // lo último que se decidió es lo que vale
+  const misma = delMismoCliente("expo_confirmar", token);
+  descartarPendientes(misma);   // lo último que se decidió es lo que vale…
+  await esperarEnVuelo(misma);  // …y la vieja que ya salió llega antes que esta
   const despues = d => {
     cli.d = d;
     guardarLocal(CACHE_INV(token), d);
@@ -968,9 +1030,9 @@ async function confirmar(va, n, boton) {
     const d = await rpc("expo_confirmar", args);
     if (vistaN === vista) despues(d);
   } catch (e) {
+    if (!(e instanceof ErrorRed)) return vistaN === vista ? pantallaError(e) : undefined;
+    const id = encolar("expo_confirmar", args);   // siempre (ver registrar)
     if (vistaN !== vista) return;
-    if (!(e instanceof ErrorRed)) return pantallaError(e);
-    const id = encolar("expo_confirmar", args);
     cli.d = { ...cli.d, confirmado: va, confirmado_cantidad: va ? n : null };
     const espera = va ? pantallaConfirmado(true) : pantallaNoVan(true);
     alSalir(id, espera, (d, error) => error ? pantallaError(error) : despues(d));
@@ -1116,6 +1178,7 @@ let busquedaN = 0, demora = null;
 
 function pantallaBuscar() {
   if (!claveCartel()) return pantallaSinClaveCartel();
+  if (altaPendiente()) return esperarAlta(altaPendiente());
   const vista = pintar(pantalla({
     datos: datosCartel(),
     arriba: false,
@@ -1201,6 +1264,7 @@ const CATEGORIAS = [
 
 function pantallaAlta() {
   if (!claveCartel()) return pantallaSinClaveCartel();
+  if (altaPendiente()) return esperarAlta(altaPendiente());
   const empresa = alcanzaParaBuscar(ultimaBusqueda) ? ultimaBusqueda.trim() : "";
   const vista = pintar(pantalla({
     datos: ["Registrarme"],
@@ -1237,34 +1301,45 @@ async function darDeAlta(n, boton) {
     return $(faltaNombre ? "#nombre" : "#empresa").focus();
   }
   const categoria = (document.querySelector('input[name="cat"]:checked') || {}).value || "cliente";
-  const args = {
-    p_clave_cartel: claveCartel(), p_nombre: nombre, p_empresa: empresa, p_categoria: categoria,
+  const args = {   // sin la clave del cartel: se pone al enviar (conClaves)
+    p_nombre: nombre, p_empresa: empresa, p_categoria: categoria,
     p_cuit: cuit || null, p_cantidad: n, p_clave: crypto.randomUUID(),   // la clave hace que un reintento no duplique
   };
   ocupar(boton, "Registrando…");
   const vista = vistaN;
+  // queda guardada ANTES de mandarla: si se recarga a mitad, el reintento usa
+  // la misma clave y la base no la duplica
+  const id = encolar("expo_alta_rapida", args);
+  ultimaBusqueda = "";
+  alSalir(id, vista, (r, error) => {
+    if (!error) return pantallaAltaLista(r.razon_social || empresa, r.llegada, r.cantidad);
+    liberar(boton, "Registrarme · " + cuantos(n));
+    $("#faltan").innerHTML = avisoFino({ tipo: "error", icono: ICONO.atencion, rol: "alert", texto: escH(mensajeDe(error)) });
+  });
   try {
-    const r = await rpc("expo_alta_rapida", args);
-    ultimaBusqueda = "";
-    if (vistaN === vista) pantallaAltaLista(r.razon_social || empresa, r.llegada, r.cantidad);
+    salio(id, await rpc("expo_alta_rapida", conClaves({ fn: "expo_alta_rapida", args })));
   } catch (e) {
-    if (vistaN !== vista) return;
-    if (!(e instanceof ErrorRed)) {
-      liberar(boton, "Registrarme · " + cuantos(n));
-      $("#faltan").innerHTML = avisoFino({ tipo: "error", icono: ICONO.atencion, rol: "alert", texto: escH(mensajeDe(e)) });
-      return;
-    }
-    const id = encolar("expo_alta_rapida", args);
-    const llegada = new Date().toISOString();
-    ultimaBusqueda = "";
-    const espera = pintar(pantalla({
-      datos: datosCartel(),
-      arriba: false,
-      cuerpo: sinSenalPasen(`<b>${escH(empresa)}</b><br>${escH(hora(llegada))} · ${escH(personas(n))}`),
-      barra: reintentando(),
-    }));
-    alSalir(id, espera, (r, error) => error ? pantallaError(error) : pantallaAltaLista(r.razon_social || empresa, r.llegada, r.cantidad));
+    if (!(e instanceof ErrorRed)) return salio(id, undefined, e);
+    // sin señal: sigue en la cola; si la cola no la mandó ya, se espera
+    const item = leerCola().find(i => i.id === id);
+    if (item && vistaN === vista) esperarAlta(item);
   }
+}
+
+/* "No hay señal, pero ya pueden pasar": el alta espera en la cola. También
+   al volver al cartel o al recargar, así nadie la carga dos veces. */
+const altaPendiente = () => leerCola().find(i => i.fn === "expo_alta_rapida");
+function esperarAlta(item) {
+  const { p_empresa: empresa, p_cantidad: n } = item.args;
+  const vista = pintar(pantalla({
+    datos: datosCartel(),
+    arriba: false,
+    cuerpo: sinSenalPasen(`<b>${escH(empresa)}</b><br>${escH(hora(item.creado))} · ${escH(personas(n))}`),
+    barra: reintentando(),
+  }));
+  alSalir(item.id, vista, (r, error) => error ? pantallaError(error) : pantallaAltaLista(r.razon_social || empresa, r.llegada, r.cantidad));
+  procesarCola();
+  return vista;
 }
 
 /* Alta lista: mismo cierre que el check-in. */
@@ -1565,7 +1640,7 @@ function tarjeta(p, mio) {
    se ve en el acto y sale enseguida; sin señal, sale cuando vuelve. Lo último
    que se tocó en una visita es lo que vale. */
 function accionEquipo(fn, visita, tomo) {
-  const args = { p_clave: eq.clave, p_equipo: eq.yo.id, p_visita: visita };
+  const args = { p_equipo: eq.yo.id, p_visita: visita };   // la clave se pone al enviar (conClaves)
   if (fn === "expo_tome_pedido") args.p_tomo = !!tomo;
   const misma = fn === "expo_tome_pedido" ? ["expo_tome_pedido"] : ["expo_anotarme", "expo_bajarme"];
   descartarPendientes(i => misma.includes(i.fn) && i.args.p_equipo === args.p_equipo && i.args.p_visita === visita);

@@ -40,8 +40,12 @@ def main() -> int:
     print("1) Corré esto en Supabase → SQL Editor (guarda solo el hash de la clave):\n")
     # solo la edición de ese año: no le cambia la clave a otra expo abierta
     print(f"   update public.expo_ediciones set clave_equipo_hash = '{hash_clave}'\n"
-          f"    where anio = {a.anio} and estado <> 'cerrada';\n")
-    print("   Tiene que decir UPDATE 1. Si dice UPDATE 0, la edición de ese año no existe o ya cerró.\n")
+          f"    where anio = {a.anio} and estado <> 'cerrada'\n"
+          f"    returning anio, estado;\n")
+    # el SQL Editor no dice cuántas filas cambió un update: el returning las muestra
+    print('   Tiene que mostrar UNA fila con el año. Si dice "Success. No rows returned",\n'
+          "   la edición de ese año no existe (ver README: crear la edición) o ya cerró:\n"
+          "   no pases el link.\n")
     print("2) Pasale este link al equipo de recorrido (solo a ellos):\n")
     print(f"   {a.url.rstrip('/')}/#equipo={clave}\n")
     print("Cada uno lo abre una vez, elige su nombre y queda guardado en el celular.")

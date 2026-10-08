@@ -55,7 +55,10 @@ def logo_claro() -> str:
     tocar un solo lugar.
     """
     index = (RAIZ / "index.html").read_text(encoding="utf-8")
-    ruta = re.search(r'const LOGO = \{ claro: "([^"]+)"', index).group(1)
+    encontrado = re.search(r'const LOGO = \{ claro: "([^"]+)"', index)
+    if not encontrado:
+        sys.exit('No encontré el logo en index.html: tiene que haber una línea const LOGO = { claro: "..." }')
+    ruta = encontrado.group(1)
     tipo = mimetypes.guess_type(ruta)[0] or "image/png"
     datos = (RAIZ / ruta).read_bytes()
     return f"data:{tipo};base64," + base64.b64encode(datos).decode("ascii")
@@ -122,8 +125,12 @@ def main() -> int:
         print("\n1) Corré esto en Supabase → SQL Editor (guarda solo el hash de la clave):\n")
         # solo la edición de ese año: no le cambia la clave a otra expo abierta
         print(f"   update public.expo_ediciones set clave_cartel_hash = '{hash_clave}'\n"
-              f"    where anio = {a.anio} and estado <> 'cerrada';\n")
-        print("   Tiene que decir UPDATE 1. Si dice UPDATE 0, la edición de ese año no existe o ya cerró.\n")
+              f"    where anio = {a.anio} and estado <> 'cerrada'\n"
+              f"    returning anio, estado;\n")
+        # el SQL Editor no dice cuántas filas cambió un update: el returning las muestra
+        print('   Tiene que mostrar UNA fila con el año. Si dice "Success. No rows returned",\n'
+              "   la edición de ese año no existe (ver README: crear la edición) o ya cerró:\n"
+              "   no imprimas el cartel.\n")
         print("2) Guardá la clave por si hay que reimprimir el mismo cartel (no la subas a ningún lado):\n")
         print(f"   {clave}\n")
         print("Si la clave se filtra, generá otra con este script y reimprimí: la vieja deja de andar.")
