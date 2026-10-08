@@ -187,6 +187,79 @@ test(`${ANCHO} px · alta rápida que vuelve a la señal justo con el tope por m
   await cerrar(page);
 });
 
+test(`${ANCHO} px · alta rápida: queda guardada ANTES de mandarla; si vuelve al buscador mientras espera, ve la que espera`, async () => {
+  let soltar;
+  const espera = new Promise((ok) => { soltar = ok; });
+  const { page } = await abrir({
+    ancho: ANCHO, hash: '#alta', local: { expoCartel: CLAVE_CARTEL },
+    rpc: { expo_alta_rapida: async () => { await espera; return SIN_RED; } },
+  });
+  await page.fill('#nombre', 'Silvina');
+  await page.fill('#empresa', 'Kalu');
+  const enCamino = page.waitForRequest((r) => r.url().endsWith('/rpc/expo_alta_rapida'));
+  await page.click('#principal');
+  await enCamino;
+  // todavía sin respuesta: ya está en el celular (una recarga no la pierde ni la duplica)
+  assert.equal((await cola(page))[0].args.p_empresa, 'Kalu');
+  await page.click('text=Volver');
+  await page.waitForSelector('text=No hay señal, pero ya pueden pasar');
+  assert.match(await texto(page), /Kalu/);
+  soltar();
+  await page.waitForTimeout(300);
+  assert.equal((await cola(page)).length, 1);
+  await cerrar(page);
+});
+
+test(`${ANCHO} px · alta rápida sin señal y recarga: muestra la que espera (no un formulario vacío) y no la duplica`, async () => {
+  let haySenal = false;
+  const { page, llamadas } = await abrir({
+    ancho: ANCHO, hash: '#alta', local: { expoCartel: CLAVE_CARTEL },
+    rpc: { expo_alta_rapida: (a) => (haySenal ? altaLista(a) : SIN_RED) },
+  });
+  await page.fill('#nombre', 'Silvina');
+  await page.fill('#empresa', 'Kalu');
+  await page.click('#principal');
+  await page.waitForSelector('text=No hay señal, pero ya pueden pasar');
+  await page.reload();
+  await page.waitForSelector('text=No hay señal, pero ya pueden pasar');
+  assert.match(await texto(page), /Kalu/);
+  assert.equal(await page.$('#nombre'), null, 'mostró el formulario vacío: la cargaría dos veces');
+  haySenal = true;
+  await vuelveLaSenal(page);
+  await page.waitForSelector('text=Bienvenidos');
+  const claves = new Set(llamadas.filter((l) => l.fn === 'expo_alta_rapida').map((l) => l.args.p_clave));
+  assert.equal(claves.size, 1, 'mandó dos altas distintas');
+  assert.deepEqual(await cola(page), []);
+  await cerrar(page);
+});
+
+test(`${ANCHO} px · alta rápida sin señal y el cartel cambió de clave: no se tira, sale con la clave nueva`, async () => {
+  const NUEVA = 'beefbeefbeefbeefbeefbeefbeefbeef';
+  let haySenal = false;
+  const { page, llamadas } = await abrir({
+    ancho: ANCHO, hash: '#alta', local: { expoCartel: CLAVE_CARTEL },
+    rpc: {
+      expo_alta_rapida: (a) => (!haySenal ? SIN_RED : a.p_clave_cartel === NUEVA ? altaLista(a) : { error: 'expo_clave_cartel_invalida' }),
+      expo_buscar: () => [],
+    },
+  });
+  await page.fill('#nombre', 'Silvina');
+  await page.fill('#empresa', 'Kalu');
+  await page.click('#principal');
+  await page.waitForSelector('text=No hay señal, pero ya pueden pasar');
+  assert.equal((await cola(page))[0].args.p_clave_cartel, undefined, 'la clave del cartel quedó guardada en la cola');
+  haySenal = true;
+  const rechazada = respuestaDe(page, 'expo_alta_rapida');
+  await vuelveLaSenal(page);
+  await rechazada;
+  assert.equal((await cola(page)).length, 1, 'se tiró el alta porque la clave vieja ya no vale');
+  await page.evaluate((c) => { location.hash = 'cartel=' + c; }, NUEVA);   // escanea el cartel nuevo
+  await page.waitForSelector('text=Bienvenidos');
+  assert.equal(llamadas.filter((l) => l.fn === 'expo_alta_rapida').at(-1).args.p_clave_cartel, NUEVA);
+  assert.deepEqual(await cola(page), []);
+  await cerrar(page);
+});
+
 test(`${ANCHO} px · alta rápida sin señal: deja pasar, guarda y la reintenta con la misma clave`, async () => {
   let haySenal = false;
   const { page, llamadas } = await abrir({
@@ -204,5 +277,18 @@ test(`${ANCHO} px · alta rápida sin señal: deja pasar, guarda y la reintenta 
   await page.waitForSelector('text=Bienvenidos');
   assert.equal(llamadas.at(-1).args.p_clave, guardada.args.p_clave, 'el reintento cambió la clave: duplicaría el alta');
   assert.deepEqual(await cola(page), []);
+  await cerrar(page);
+});
+
+test(`${ANCHO} px · con el almacenamiento bloqueado, el QR del cartel igual abre el buscador y busca con su clave`, async () => {
+  const { page, llamadas, errores } = await abrir({ ancho: ANCHO, hash: '#cartel=' + CLAVE_CARTEL, almacenamiento: 'bloqueado', rpc: { expo_buscar: () => [] } });
+  await page.waitForSelector('text=Buscá tu empresa');
+  const buscada = respuestaDe(page, 'expo_buscar');
+  await page.fill('#q', 'papel');
+  await buscada;
+  assert.equal(llamadas.at(-1).args.p_clave, CLAVE_CARTEL);
+  // no se pudo guardar: queda en la URL, así una recarga no la pierde
+  assert.equal(await page.evaluate(() => location.hash), '#cartel=' + CLAVE_CARTEL);
+  assert.deepEqual(errores, []);
   await cerrar(page);
 });

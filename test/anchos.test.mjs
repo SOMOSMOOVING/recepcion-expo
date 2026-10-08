@@ -2,7 +2,7 @@
 // y nada de la pantalla se sale por el costado.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { abrir, ANCHOS, TOKEN, CLAVE_CARTEL, enCurso, desbordes } from './navegador.mjs';
+import { abrir, ANCHOS, TOKEN, CLAVE_CARTEL, enCurso, desbordes, visitaDePrueba } from './navegador.mjs';
 
 const RAZONES = {
   'con guion': 'MINUCHIN MARTA LILIANA - LIBRERIA PAPELTEC',
@@ -54,6 +54,28 @@ for (const ancho of ANCHOS) {
     await page.click('[aria-label="6 o más"]');  // el radio transparente va encima del "6+"
     await page.click('[aria-label="Uno más"]');
     assert.equal(await page.textContent('#principal'), 'Estoy acá · somos 7');
+    assert.deepEqual(await desbordes(page), []);
+    await page.context().close();
+  });
+
+  test(`${ancho} px · recorrido · tarjetas propias y ajenas, con "Tomé el pedido", sin salirse`, async () => {
+    const yo = { id: '11111111-1111-4111-8111-111111111111', nombre: 'Sofía Giménez', rol: 'hostess' };
+    // datos largos a propósito: zona, vendedor y razón social que no entran en un renglón
+    const tarjeta = (n, razon, extra) => visitaDePrueba(n, razon, {
+      cantidad: 4, zona: 'Bernardo de Irigoyen', categoria: 'comex', vendedor: 'María Florencia Rodríguez Echeverría', ...extra,
+    });
+    const { page } = await abrir({
+      ancho, hash: '#recorrido', local: { expoEquipo: '0123456789abcdef0123456789abcdef', expoYo: yo },
+      rpc: {
+        expo_presentes: () => ({ estado: 'en_curso', hoy: '2026-10-15', es_dia: true, hora_apertura: '09:00:00', presentes: [
+          tarjeta(1, RAZONES['más de 60 caracteres']),
+          tarjeta(2, RAZONES['una palabra larguísima'], { sin_codigo: true, recorrido: [
+            { id: yo.id, nombre: yo.nombre, tomo_pedido: true },
+            { id: '2', nombre: 'Ana López', tomo_pedido: false }, { id: '3', nombre: 'Camila Rodríguez', tomo_pedido: true }] }),
+        ] }),
+      },
+    });
+    await page.waitForSelector('.mr-presente--mio');
     assert.deepEqual(await desbordes(page), []);
     await page.context().close();
   });

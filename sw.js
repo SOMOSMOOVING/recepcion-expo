@@ -6,7 +6,8 @@
    tener los logos de LOGO (los controla test/app.test.mjs): al publicar una
    versión nueva, cambian los dos. */
 const VERSION = "v1";
-const CACHE = "recepcion-expo-" + VERSION;
+const PREFIJO = "recepcion-expo-";
+const CACHE = PREFIJO + VERSION;
 const SHELL = ["./", "./index.html", "./assets/logo-claro.png", "./assets/logo-oscuro.png"];
 const FUENTES = ["fonts.googleapis.com", "fonts.gstatic.com"];
 const ESPERA_RED_MS = 3000;   // con señal que conecta pero no contesta, no dejar la pantalla en blanco
@@ -20,10 +21,13 @@ self.addEventListener("install", e => {
   );
 });
 
+/* Borra solo las versiones viejas de ESTA app. La app de pedidos está en el
+   mismo sitio (somosmooving.github.io) y comparte los cachés: los suyos no se
+   tocan, que sin ellos no anda sin señal. */
 self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys()
-      .then(claves => Promise.all(claves.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(claves => Promise.all(claves.filter(k => k.startsWith(PREFIJO) && k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

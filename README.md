@@ -14,12 +14,33 @@ Todo se elige con lo que va después del `#` en la dirección (no se manda al se
 |---|---|
 | `…/#t=<token>` | 1 · Check-in del cliente: el link de la invitación y el QR del mail |
 | `…/#cartel=<clave del cartel>` | 2 · Cartel de la entrada: guarda la clave en el celular y abre el buscador |
+| `…/#equipo=<clave del equipo>` | 3 · Equipo de recorrido: guarda la clave, pregunta "¿Quién sos?" una vez y muestra los presentes del día |
 
-- **Sin señal:** el registro se guarda en el celular, se deja pasar y se reintenta solo. Si se cierra la página, sigue al abrirla de nuevo.
+- **Sin señal:** el registro se guarda en el celular, se deja pasar y se reintenta solo. Si se cierra la página, sigue al abrirla de nuevo. En el equipo de recorrido, cada toque ("Me anoto", "Me bajo", "Tomé el pedido") se guarda primero en el celular y sale en orden.
 - **Logo:** está en `assets/`. Para pasar al GIF animado, cambiar `LOGO` al principio del script del `index.html`.
 - **Versión:** `APP_VERSION` en el `index.html` y `VERSION` en `sw.js` van siempre iguales (un test lo controla). Si no se cambian al publicar, los celulares se quedan con la versión vieja.
 
 Para probarla en la compu: `npx serve .` y abrir `http://localhost:3000/#t=<token>`. Los tests no necesitan nada de eso.
+
+### Crear la edición (una vez por expo, antes del cartel y del link)
+
+La migración crea las tablas vacías. Cuando se sepa la fecha, en Supabase → SQL Editor (con los días de esa expo):
+
+```sql
+insert into public.expo_ediciones (anio, dias)
+values (2027, array['2027-10-13', '2027-10-14', '2027-10-15']::date[])
+returning id, anio, estado;
+```
+
+Tiene que mostrar una fila con `estado = previa`. Recién ahí se generan el link del equipo y el cartel: los dos guardan su clave en esa fila. El día que abre la expo, `update public.expo_ediciones set estado = 'en_curso' where anio = 2027 returning anio, estado;`, y al terminar, `'cerrada'`.
+
+### Link del equipo de recorrido
+
+```bash
+python scripts/link_equipo.py --anio 2027
+```
+
+Genera una clave nueva, imprime el `update` para guardar su hash en Supabase (SQL Editor) y el link para pasarle al equipo. El `update` tiene que mostrar una fila con el año: si dice "Success. No rows returned", la edición no existe o ya cerró. Si el link se filtra, se genera otro: el viejo deja de andar al correr el SQL nuevo.
 
 ### Cartel de la entrada (A3)
 
@@ -39,10 +60,7 @@ Las migraciones están en `sql/expo-migracion-vNN.sql`. Son idempotentes: se pue
 
 1. Abrí Supabase → **SQL Editor** y pegá la migración nueva entera.
 2. Necesita `public.es_admin()` de la app de pedidos. Si no está, frena con un error.
-3. Al final, la sección **VERIFICACIÓN** devuelve tres resultados:
-   - todas las tablas `expo_*` con `rls = true`;
-   - la lista de funciones que puede ejecutar el anónimo (ninguna empieza con `expo__`);
-   - ninguna tabla legible por el anónimo (0 filas).
+3. El SQL Editor muestra solo el resultado de la última consulta. Por eso la sección **VERIFICACIÓN** controla todo (RLS prendido, el anónimo sin tablas y solo con sus funciones, nadie con las internas) y, si algo no da, **frena con un error que empieza con `VERIFICACIÓN:`** y no queda nada aplicado. Si pasa, se ve una sola fila: `listo: expo v01 verificada`, `tablas_con_rls = 10`, `funciones_del_anonimo = 11`.
 4. **Siempre se corre el SQL antes de publicar el `index.html`.**
 
 Quién puede hacer qué:
