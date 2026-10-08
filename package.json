@@ -1,0 +1,17 @@
+{
+  "name": "recepcion-expo",
+  "private": true,
+  "type": "module",
+  "description": "Recepción de la expo Mooving. La app es un solo index.html sin build; npm es solo para los tests.",
+  "scripts": {
+    "test": "node --test --test-force-exit --test-concurrency=2 --test-timeout=60000 test/*.test.mjs",
+    "mutacion": "node test/mutacion.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "playwright-core": "^1.64.0"
+  }
+}

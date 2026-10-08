@@ -33,7 +33,8 @@ Editalo si querés cambiar qué se revisa: el workflow no hace falta tocarlo.
 
 ### Apps y páginas web (HTML/JS/TS, Supabase)
 - Clave `service_role` o secretos en el frontend (sólo puede ir la `anon`/publishable key).
-- Tablas sin RLS o con políticas demasiado abiertas (`using (true)` para escritura). Revisá las migraciones en `supabase/`.
+- Tablas sin RLS o con políticas demasiado abiertas (`using (true)` para escritura). Revisá las migraciones en `sql/expo-migracion-vNN.sql`.
+- Funciones `security definer` en `public`: Supabase le da EXECUTE a `anon` sobre toda función nueva, así que cada una tiene que quedar revocada salvo las que son públicas a propósito (la lista está en la sección 7 de la migración y en `test/seguridad.test.mjs`).
 - Datos personales de clientes (mails, teléfonos, CUIT) expuestos a quien no debería verlos.
 - QR, links o IDs adivinables (correlativos) que permiten ver o marcar registros de otro cliente.
 - Inputs sin validar; `innerHTML` con datos del usuario (XSS).

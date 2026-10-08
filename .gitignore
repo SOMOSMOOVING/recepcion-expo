@@ -25,3 +25,6 @@ Thumbs.db
 
 # Informe temporal de la revisión automática
 revision-claude.md
+
+# Carteles generados: tienen la clave del cartel adentro
+cartel/
