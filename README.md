@@ -14,12 +14,21 @@ Todo se elige con lo que va después del `#` en la dirección (no se manda al se
 |---|---|
 | `…/#t=<token>` | 1 · Check-in del cliente: el link de la invitación y el QR del mail |
 | `…/#cartel=<clave del cartel>` | 2 · Cartel de la entrada: guarda la clave en el celular y abre el buscador |
+| `…/#equipo=<clave del equipo>` | 3 · Equipo de recorrido: guarda la clave, pregunta "¿Quién sos?" una vez y muestra los presentes del día |
 
-- **Sin señal:** el registro se guarda en el celular, se deja pasar y se reintenta solo. Si se cierra la página, sigue al abrirla de nuevo.
+- **Sin señal:** el registro se guarda en el celular, se deja pasar y se reintenta solo. Si se cierra la página, sigue al abrirla de nuevo. En el equipo de recorrido, cada toque ("Me anoto", "Me bajo", "Tomé el pedido") se guarda primero en el celular y sale en orden.
 - **Logo:** está en `assets/`. Para pasar al GIF animado, cambiar `LOGO` al principio del script del `index.html`.
 - **Versión:** `APP_VERSION` en el `index.html` y `VERSION` en `sw.js` van siempre iguales (un test lo controla). Si no se cambian al publicar, los celulares se quedan con la versión vieja.
 
 Para probarla en la compu: `npx serve .` y abrir `http://localhost:3000/#t=<token>`. Los tests no necesitan nada de eso.
+
+### Link del equipo de recorrido
+
+```bash
+python scripts/link_equipo.py --anio 2027
+```
+
+Genera una clave nueva, imprime el `update` para guardar su hash en Supabase (SQL Editor) y el link para pasarle al equipo. Si el link se filtra, se genera otro: el viejo deja de andar al correr el SQL nuevo.
 
 ### Cartel de la entrada (A3)
 

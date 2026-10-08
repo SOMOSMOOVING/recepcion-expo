@@ -76,8 +76,9 @@ export function previa(extra = {}) {
 
 /* Abre la app al ancho indicado (obligatorio: el nombre del test lo dice).
    rpc: { nombreFuncion: (args, n) => respuesta | SIN_RED | { error: 'expo_...' } }
+   reloj: true para adelantar el tiempo desde el test (lo que se actualiza solo).
    Devuelve la página y las llamadas que hizo ({ fn, args }). */
-export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = null, oscuro = false } = {}) {
+export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = null, oscuro = false, reloj = false } = {}) {
   if (!ancho) throw new Error("abrir(): falta el ancho (cada test dice a qué ancho mira)");
   await arrancar();
   const contexto = await navegador.newContext({
@@ -87,6 +88,7 @@ export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = nu
     timezoneId: 'America/Argentina/Buenos_Aires',
     colorScheme: oscuro ? 'dark' : 'light',
   });
+  if (reloj) await contexto.clock.install();   // el test maneja el tiempo (page.clock.fastForward)
   const llamadas = [];
   const veces = {};
   await contexto.route('https://fonts.googleapis.com/**', (r) => r.abort());
@@ -117,6 +119,15 @@ export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = nu
   page.on('pageerror', (e) => errores.push(e.message));
   await page.goto(`${origen}/index.html${hash}`);
   return { page, llamadas, errores, contexto, origen };
+}
+
+// Una visita como la devuelve expo_presentes (n distingue una de otra; las de n más alto llegaron antes).
+export function visitaDePrueba(n, razon, extra = {}) {
+  return {
+    visita_id: `${n}${n}${n}${n}${n}${n}${n}${n}-0000-4000-8000-000000000000`,
+    llegada: new Date(Date.now() - n * 600000).toISOString(), cantidad: 2, razon_social: razon,
+    zona: 'Zona Sur', categoria: 'cliente', sin_codigo: false, vendedor: 'Laura Benítez', recorrido: [], ...extra,
+  };
 }
 
 // Lo que hay en la cola sin señal del celular.

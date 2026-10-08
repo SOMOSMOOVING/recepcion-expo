@@ -369,6 +369,7 @@ html, body { margin: 0; background: var(--fondo); }
 /* ==========================================================================
    Recepción Expo Mooving — un solo archivo, sin build ni librerías.
    Pantallas: 1 · check-in del cliente (#t=TOKEN)  ·  2 · cartel (#cartel=CLAVE)
+              3 · equipo de recorrido (#equipo=CLAVE)
    El diseño (clases mr-, textos) está en diseno/mooving-recepcion.html.
 
    Reglas que no se negocian:
@@ -398,6 +399,8 @@ const ESPERA_RED_MS = 8000;         // más que esto sin respuesta = sin señal
 const REINTENTO_MIN_MS = 5000;      // la cola sin señal reintenta cada vez más espaciado…
 const REINTENTO_MAX_MS = 30000;     // …hasta este tope
 const DEMORA_BUSQUEDA_MS = 250;     // espera a que termine de escribir antes de buscar
+const REFRESCO_PRESENTES_MS = 15000; // la lista del equipo de recorrido se actualiza sola
+const TOSTADA_MS = 6000;            // cuánto queda "Te anotaste con… Deshacer"
 const TOKEN_RE = /^[0-9a-f]{32}$/;  // tokens del QR y claves de los links
 
 /* ====== utilidades ====== */
@@ -418,6 +421,14 @@ function guardarLocal(clave, valor) {
 }
 function borrarLocal(clave) {
   try { localStorage.removeItem(clave); } catch (e) { /* idem */ }
+}
+
+/* Las claves de los links (cartel, equipo): se guardan en el celular y salen
+   de la URL, así no quedan en capturas ni en el historial. */
+const leerClave = nombre => { const c = leerLocal(nombre); return TOKEN_RE.test(c || "") ? c : null; };
+function claveDelLink(valor, nombre, destino) {
+  if (TOKEN_RE.test(valor)) guardarLocal(nombre, valor);
+  history.replaceState(null, "", location.pathname + location.search + destino);
 }
 
 const personas = n => n === 1 ? "1 persona" : n + " personas";
@@ -496,6 +507,9 @@ const MENSAJES = {
   expo_categoria_invalida: "Elegí cómo venís a la expo.",
   expo_demasiadas_altas_minuto: "Hay muchos registros en este momento. Probá de nuevo en un minuto.",
   expo_demasiadas_altas_dia: "Se llegó al máximo de registros de hoy. Pedí ayuda en la entrada.",
+  expo_visita_invalida: "Esa visita ya no está en la lista de hoy.",
+  expo_no_anotado: "Para marcar el pedido, primero anotate con ese presente.",
+  expo_equipo_invalido: "No figurás en el equipo activo. Pedile a recepción que te agregue.",
 };
 const mensajeDe = e => MENSAJES[e && e.message] || "Algo salió mal. Pedí ayuda en la entrada.";
 
@@ -536,10 +550,16 @@ const quitarDeCola = id => guardarLocal(COLA, leerCola().filter(i => i.id !== id
 const pendiente = (fn, token) => leerCola().filter(i => i.fn === fn && i.args.p_token === token).pop();
 
 /* Una decisión nueva manda: lo viejo de la misma clase que seguía en la cola
-   (por ejemplo un "no vamos" sin señal) no puede pisarla después. */
-function descartarPendientes(fn, token) {
-  guardarLocal(COLA, leerCola().filter(i => !(i.fn === fn && i.args.p_token === token)));
+   (por ejemplo un "no vamos" sin señal) no puede pisarla después.
+   cual(item) dice qué descartar. */
+function descartarPendientes(cual) {
+  guardarLocal(COLA, leerCola().filter(i => !cual(i)));
 }
+const delMismoCliente = (fn, token) => i => i.fn === fn && i.args.p_token === token;
+
+/* Quien quiera enterarse de que la cola se quedó sin red (la pantalla del
+   equipo muestra "Sin conexión") pone acá qué hacer. */
+let avisarSinRed = null;
 
 /* Cuando sale el envío `id`: hacer `hacer` solo si sigue la pantalla `vista`. */
 function alSalir(id, vista, hacer) {
@@ -560,10 +580,13 @@ async function procesarCola() {
         if (e instanceof ErrorRed) {
           reintento = setTimeout(procesarCola, espera);
           espera = Math.min(espera * 2, REINTENTO_MAX_MS);
+          if (avisarSinRed) avisarSinRed();
           return;
         }
         error = e;   // la base lo rechazó: reintentar no lo arregla
-        guardarLocal(RECHAZADOS, (leerLocal(RECHAZADOS) || []).concat({ ...item, error: e.message, cuando: new Date().toISOString() }));
+        // queda anotado en el celular para revisar, sin las claves de los links
+        const { p_clave, p_clave_cartel, ...datos } = item.args;
+        guardarLocal(RECHAZADOS, (leerLocal(RECHAZADOS) || []).concat({ ...item, args: datos, error: e.message, cuando: new Date().toISOString() }));
       }
       quitarDeCola(item.id);
       const hacer = alEnviar[item.id];
@@ -587,6 +610,7 @@ const ICONO = {
   invalido: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M8.8 8.8l6.4 6.4M15.2 8.8l-6.4 6.4"/></svg>',
   reloj: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 7v5.2l3.2 2"/></svg>',
   lupa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20"/></svg>',
+  personas: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 19.5c.7-3.4 3-5.2 6-5.2s5.3 1.8 6 5.2"/><path d="M16 4.6a3.5 3.5 0 010 6.8M18.2 14.4c1.6.8 2.6 2.4 2.9 5.1"/></svg>',
   flecha: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
 };
 
@@ -600,10 +624,12 @@ function cabecera(datos, accion = "") {
 
 /* Pantalla de celular: cabecera, cuerpo y (si hay) barra de abajo.
    arriba: el check-in deja más aire arriba que el cartel (como en el diseño).
+   hueco: el espacio entre bloques, si la pantalla del diseño usa otro.
    extra: lo que va después de la barra (el buscador repinta ahí la suya). */
-function pantalla({ datos, accion = "", cuerpo, barra = "", arriba = true, extra = "" }) {
+function pantalla({ datos, accion = "", cuerpo, barra = "", arriba = true, hueco = "", extra = "" }) {
+  const estilo = [arriba && "padding-top:var(--esp-6)", hueco && "gap:" + hueco].filter(Boolean).join(";");
   return `<main class="mr-pantalla">${cabecera(datos, accion)}`
-    + `<div class="mr-cuerpo"${arriba ? ' style="padding-top:var(--esp-6)"' : ""}>${cuerpo}</div>`
+    + `<div class="mr-cuerpo"${estilo ? ` style="${estilo}"` : ""}>${cuerpo}</div>`
     + (barra ? `<div class="mr-barra">${barra}</div>` : "")
     + extra + `</main>`;
 }
@@ -643,10 +669,16 @@ const sinSenalPasen = (texto, estilo = "") =>
 
 /* Razón social: entera, partida en el primer " - ", nunca cortada.
    Más de 60 caracteres baja a 24 px. */
+/* "MINUCHIN MARTA LILIANA - LIBRERIA PAPELTEC" → ["MINUCHIN MARTA LILIANA", "LIBRERIA PAPELTEC"] */
+const SEPARADOR_RAZON = " - ";
+function partirRazon(texto) {
+  const i = texto.indexOf(SEPARADOR_RAZON);
+  return i > 0 ? [texto.slice(0, i), texto.slice(i + SEPARADOR_RAZON.length)] : [texto];
+}
+
 function razon(rs, datos = "") {
   const texto = String(rs == null ? "" : rs);
-  const i = texto.indexOf(" - ");
-  const partes = i > 0 ? [texto.slice(0, i), texto.slice(i + 3)] : [texto];
+  const partes = partirRazon(texto);
   const larga = texto.length > 60 ? " mr-razon--larga" : "";
   return `<div><h1 class="mr-razon${larga}">${partes.map(p => `<span>${escH(p)}</span>`).join(" ")}</h1>`
     + (datos ? `<p class="mr-razon-datos">${datos}</p>` : "") + `</div>`;
@@ -888,7 +920,7 @@ function pantallaCorregir(actual, visita) {
     if (boton.disabled) return;
     const n = cantidad(), token = cli.token;
     ocupar(boton, "Guardando…");
-    descartarPendientes("expo_corregir_cantidad", token);
+    descartarPendientes(delMismoCliente("expo_corregir_cantidad", token));
     try {
       const r = await rpc("expo_corregir_cantidad", { p_token: token, p_cantidad: n });
       if (vistaN === vista) pantallaYaRegistrado(r);
@@ -926,7 +958,7 @@ async function confirmar(va, n, boton) {
   ocupar(boton, va ? "Confirmando…" : "Avisando…");
   const vista = vistaN, token = cli.token;
   const args = { p_token: token, p_cantidad: va ? n : null, p_va: va };
-  descartarPendientes("expo_confirmar", token);   // lo último que se decidió es lo que vale
+  descartarPendientes(delMismoCliente("expo_confirmar", token));   // lo último que se decidió es lo que vale
   const despues = d => {
     cli.d = d;
     guardarLocal(CACHE_INV(token), d);
@@ -1042,7 +1074,7 @@ function pantallaError(e) {
    buscar ni dar de alta.
    ========================================================================== */
 const CLAVE_CARTEL = "expoCartel";
-const claveCartel = () => { const c = leerLocal(CLAVE_CARTEL); return TOKEN_RE.test(c || "") ? c : null; };
+const claveCartel = () => leerClave(CLAVE_CARTEL);
 let ultimaBusqueda = "";
 
 const datosCartel = () => ["Registro", capital(diaLargo(hoyAR()))];
@@ -1245,6 +1277,321 @@ function pantallaAltaLista(empresa, llegada, n) {
 }
 
 /* ==========================================================================
+   3 · EQUIPO DE RECORRIDO  (#equipo=CLAVE → #recorrido)
+   El link del equipo lleva una clave (decidido el 06/10: opción A). La clave
+   y quién es cada uno quedan en el celular: "Sin usuario ni clave".
+   Lo normal es "Lo atiende su vendedor" (nada cargado); "Me anoto" registra
+   la excepción. Nunca se carga el vendedor como recorrido: solo se manda el
+   id de la persona del equipo que eligió "¿Quién sos?".
+   ========================================================================== */
+const CLAVE_EQUIPO = "expoEquipo";
+const YO = "expoYo";                        // { id, nombre, rol } de "¿Quién sos?"
+const PRESENTES_GUARDADOS = "expoPresentes";
+const LISTA_EQUIPO = "expoEquipoLista";
+const ACCIONES_EQUIPO = ["expo_anotarme", "expo_bajarme", "expo_tome_pedido"];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const claveEquipo = () => leerClave(CLAVE_EQUIPO);
+const yo = () => { const y = leerLocal(YO); return y && UUID_RE.test(y.id || "") ? y : null; };
+const fmtDiaCorto = new Intl.DateTimeFormat("es-AR", { weekday: "short", timeZone: "UTC" });
+const diaCorto = iso => capital(fmtDiaCorto.format(fechaDe(iso)).replace(".", "")) + " " + fechaDe(iso).getUTCDate();   // "Mié 15"
+const ROLES = { hostess: "Hostess", marketing: "Marketing" };
+const CATEGORIA_INSIGNIA = {
+  comex: ["comex", "Comex"],
+  proveedor: ["proveedor", "Proveedor"],
+  licencia: ["licencia", "Agente de licencia"],
+  cliente_de_cliente: ["cliente-de-cliente", "Cliente de un cliente"],
+};
+
+/* "Sofía Giménez" → "Sofía G." (como en el diseño) */
+function corto(nombre) {
+  const p = String(nombre || "").trim().split(/\s+/);
+  return p.length > 1 ? `${p[0]} ${p[p.length - 1].charAt(0).toUpperCase()}.` : p[0];
+}
+/* "Ana L. y Camila R." / "Ana L., Camila R. y vos" */
+function enumerar(nombres) {
+  return nombres.length < 2 ? nombres.join("") : nombres.slice(0, -1).join(", ") + " y " + nombres[nombres.length - 1];
+}
+/* "MINUCHIN MARTA LILIANA - LIBRERIA PAPELTEC" → "Libreria Papeltec": el nombre
+   del local, con mayúscula inicial, para la tostada. Las tildes que no están
+   en Finnegans no se pueden adivinar. */
+function nombreDelLocal(rs) {
+  const partes = partirRazon(String(rs || ""));
+  return partes[partes.length - 1].toLowerCase().replace(/(^|\s)(\S)/g, (_, a, b) => a + b.toUpperCase());
+}
+
+/* La pantalla del equipo que está abierta:
+   { clave, yo, vista, datos (expo_presentes), vistoEn, sinRed, aviso, filtro, q, tostada } */
+let eq = null;
+
+function pantallaEquipoSinClave() {
+  return pintar(pantalla({
+    datos: ["Recorridos"],
+    arriba: false,
+    cuerpo: estado({
+      tipo: "error", icono: ICONO.invalido, titulo: "Este link del equipo ya no sirve", grande: false,
+      textos: `<p class="mr-chico">Pedile a recepción el link nuevo del equipo de recorrido.</p>`,
+    }),
+  }));
+}
+function claveEquipoVencida() {
+  borrarLocal(CLAVE_EQUIPO);
+  return pantallaEquipoSinClave();
+}
+
+/* Lo que todavía no salió (en la cola) ya se ve aplicado en la lista. */
+function aplicarAccion(datos, { fn, args }, nombre) {
+  const p = (datos.presentes || []).find(x => x.visita_id === args.p_visita);
+  if (!p) return;
+  const estoy = p.recorrido.some(r => r.id === args.p_equipo);
+  if (fn === "expo_anotarme" && !estoy) p.recorrido = p.recorrido.concat({ id: args.p_equipo, nombre, tomo_pedido: false });
+  if (fn === "expo_bajarme") p.recorrido = p.recorrido.filter(r => r.id !== args.p_equipo);
+  if (fn === "expo_tome_pedido") p.recorrido = p.recorrido.map(r => r.id === args.p_equipo ? { ...r, tomo_pedido: args.p_tomo } : r);
+}
+const accionesPendientes = idEquipo => leerCola().filter(i => ACCIONES_EQUIPO.includes(i.fn) && i.args.p_equipo === idEquipo);
+
+/* "¿Quién sos?": se elige una vez y queda en el celular. Si ya había alguien
+   elegido, "Volver" deja todo como estaba. */
+async function pantallaQuienSos() {
+  const clave = claveEquipo();
+  if (!clave) return pantallaEquipoSinClave();
+  const vista = pintar(pantalla({
+    datos: ["Recorridos · " + diaCorto(hoyAR())],
+    accion: yo() ? `<button class="mr-boton mr-boton--texto" type="button" id="volverRecorrido" style="min-height:32px">Volver</button>` : "",
+    arriba: false,
+    hueco: "var(--esp-4)",
+    cuerpo: `<div><h1 class="mr-titulo">¿Quién sos?</h1>`
+      + `<p class="mr-chico" style="margin-top:4px">Se elige una vez y queda guardado en este celular. Sin usuario ni clave.</p></div>`
+      + `<div class="mr-buscador">${ICONO.lupa}<input class="mr-entrada" type="search" id="quien" aria-label="Buscá tu nombre" autocomplete="off" style="font-size:18px"></div>`
+      + `<div id="listaEquipo" style="display:contents"></div>`
+      + `<p class="mr-chico">¿No estás? Pedile a recepción que te agregue.</p>`,
+  }));
+  let lista = leerLocal(LISTA_EQUIPO) || [];
+  const pintarLista = () => {
+    const q = normalizar($("#quien").value);
+    const quienes = lista.filter(p => !q || normalizar(p.nombre).includes(q));
+    $("#listaEquipo").innerHTML = quienes.length ? `<ul class="mr-lista">${quienes.map(p =>
+      `<li><button class="mr-resultado" type="button" data-id="${escH(p.id)}" style="min-height:56px"><span class="mr-resultado-texto">`
+      + `<span class="mr-resultado-razon">${escH(p.nombre)}</span><span class="mr-chico" style="display:block">${escH(ROLES[p.rol] || "")}</span>`
+      + `</span><span class="mr-resultado-flecha">${ICONO.flecha}</span></button></li>`).join("")}</ul>` : "";
+    document.querySelectorAll("#listaEquipo [data-id]").forEach(b => {
+      b.onclick = () => {
+        const p = lista.find(x => x.id === b.dataset.id);
+        guardarLocal(YO, { id: p.id, nombre: p.nombre, rol: p.rol });
+        pantallaRecorrido();
+      };
+    });
+  };
+  if ($("#volverRecorrido")) $("#volverRecorrido").onclick = () => pantallaRecorrido();
+  $("#quien").addEventListener("input", pintarLista);
+  pintarLista();
+  $("#quien").focus();
+  try {
+    lista = await rpc("expo_equipo_lista", { p_clave: clave }) || [];
+    guardarLocal(LISTA_EQUIPO, lista);
+  } catch (e) {
+    if (vistaN !== vista) return;
+    if (e instanceof ErrorServidor && e.message === "expo_clave_invalida") return claveEquipoVencida();
+    // sin señal: queda la lista que se vio la última vez (si hubo)
+  }
+  if (vistaN === vista) pintarLista();
+}
+
+/* Presentes del día: cabecera, buscador y una lista que se repinta sola. */
+function pantallaRecorrido() {
+  const clave = claveEquipo(), quien = yo();
+  if (!clave) return pantallaEquipoSinClave();
+  if (!quien) return pantallaQuienSos();
+  // lo guardado sirve solo si es de hoy y de esta persona: la lista de ayer no se usa
+  const guardados = leerLocal(PRESENTES_GUARDADOS);
+  const sirve = guardados && guardados.equipo === quien.id && guardados.datos && guardados.datos.hoy === hoyAR();
+  const vista = pintar(pantalla({
+    datos: ["Recorridos · " + diaCorto(hoyAR())],
+    accion: `<button class="mr-boton mr-boton--texto" type="button" id="quiensoy" style="min-height:32px" aria-label="Cambiar de persona (ahora: ${escH(quien.nombre)})">${escH(corto(quien.nombre))} ▾</button>`,
+    arriba: false,
+    hueco: "var(--esp-3)",
+    cuerpo: `<div id="sinred" style="display:contents"></div>`
+      + `<div class="mr-buscador" style="margin-bottom:2px">${ICONO.lupa}<input class="mr-entrada" type="search" id="buscarPresente" placeholder="Buscar presente" aria-label="Buscar presente" autocomplete="off" style="min-height:48px;font-size:16px"></div>`
+      + `<div id="presentes" style="display:contents"></div>`
+      + `<div id="tostada" style="display:contents"></div>`,
+  }));
+  eq = {
+    clave, yo: quien, vista, filtro: "todos", q: "", tostada: null, aviso: "", sinRed: false,
+    datos: sirve ? guardados.datos : null, vistoEn: sirve ? guardados.vistoEn : null,
+  };
+  $("#quiensoy").onclick = () => pantallaQuienSos();
+  $("#buscarPresente").addEventListener("input", e => { eq.q = e.target.value; repintarPresentes(); });
+  // los toques de la lista se atienden acá una sola vez (la lista se repinta seguido)
+  $("#presentes").addEventListener("click", tocarEnLaLista);
+  $("#presentes").addEventListener("change", tocarEnLaLista);
+  avisarSinRed = () => { if (eq && vistaN === eq.vista) { eq.sinRed = true; repintarPresentes(); } };
+  repintarPresentes();
+  cargarPresentes(vista);
+  const reloj = setInterval(() => (vistaN === vista ? cargarPresentes(vista) : clearInterval(reloj)), REFRESCO_PRESENTES_MS);
+  return vista;
+}
+
+function tocarEnLaLista(e) {
+  const t = e.target;
+  if (e.type === "change" && t.dataset.pedido) return accionEquipo("expo_tome_pedido", t.dataset.pedido, t.checked);
+  if (e.type !== "click") return;
+  const b = t.closest("button");
+  if (!b) return;
+  if (b.dataset.filtro) { eq.filtro = b.dataset.filtro; return repintarPresentes(); }
+  if (b.dataset.anotar) return accionEquipo("expo_anotarme", b.dataset.anotar);
+  if (b.dataset.bajar) return accionEquipo("expo_bajarme", b.dataset.bajar);
+}
+
+async function cargarPresentes(vista) {
+  try {
+    const datos = await rpc("expo_presentes", { p_clave: eq.clave, p_equipo: eq.yo.id });
+    if (vistaN !== vista) return;
+    eq.datos = datos;
+    eq.vistoEn = Date.now();
+    eq.sinRed = false;
+    guardarLocal(PRESENTES_GUARDADOS, { equipo: eq.yo.id, datos, vistoEn: eq.vistoEn });
+  } catch (e) {
+    if (vistaN !== vista) return;
+    if (e instanceof ErrorServidor && e.message === "expo_clave_invalida") return claveEquipoVencida();
+    if (e instanceof ErrorServidor && e.message === "expo_equipo_invalido") {
+      borrarLocal(YO);   // ya no está en el equipo activo: que vuelva a elegir
+      return pantallaQuienSos();
+    }
+    eq.sinRed = true;
+  }
+  repintarPresentes();
+}
+
+/* Repinta los avisos, los filtros y las tarjetas (el buscador queda: no pierde
+   el foco). Lo que tenía el foco lo vuelve a tener después. */
+function repintarPresentes() {
+  if (!eq || vistaN !== eq.vista) return;
+  const avisos = (eq.aviso ? avisoFino({ tipo: "error", icono: ICONO.atencion, rol: "alert", texto: escH(eq.aviso) }) : "")
+    + (eq.sinRed ? avisoFino({ tipo: "error", icono: ICONO.sinRed, texto: `<b style="display:inline">Sin conexión.</b> ${escH(antiguedad(eq.vistoEn))} Lo que anotes se envía cuando vuelva.` }) : "");
+  cambiarSiHaceFalta($("#sinred"), avisos);   // si no cambió, no se vuelve a anunciar
+
+  const datos = eq.datos ? structuredClone(eq.datos) : { presentes: [] };
+  accionesPendientes(eq.yo.id).forEach(i => aplicarAccion(datos, i, eq.yo.nombre));
+  const todos = (datos.presentes || []).slice().sort((a, b) => new Date(b.llegada) - new Date(a.llegada));   // los últimos arriba
+
+  const volverAlFoco = recordarFoco();
+  $("#presentes").innerHTML = todos.length ? listaDePresentes(todos) : nadieLlego(datos);
+  volverAlFoco();
+  cambiarSiHaceFalta($("#tostada"), eq.tostada
+    ? `<div class="mr-tostada" role="status" style="position:sticky;bottom:12px">${escH(eq.tostada.texto)} <button class="mr-boton mr-boton--texto" type="button" id="deshacer">Deshacer</button></div>`
+    : "");
+  if (eq.tostada) $("#deshacer").onclick = () => accionEquipo("expo_bajarme", eq.tostada.visita);
+}
+
+function cambiarSiHaceFalta(caja, html) {
+  if (caja.dataset.html !== html) { caja.innerHTML = html; caja.dataset.html = html; }
+}
+
+/* Qué tenía el foco (el botón o la casilla de una tarjeta, o un filtro) para
+   devolvérselo cuando se repinta la lista. */
+function recordarFoco() {
+  const a = document.activeElement;
+  if (!a || !$("#presentes").contains(a)) return () => {};
+  const tarjeta = a.closest("[data-visita]");
+  const selector = a.dataset.filtro ? `[data-filtro="${a.dataset.filtro}"]`
+    : tarjeta ? `[data-visita="${tarjeta.dataset.visita}"] ${a.dataset.pedido ? "[data-pedido]" : ".mr-presente-pie .mr-boton"}` : null;
+  return () => { const otra = selector && $("#presentes " + selector); if (otra) otra.focus({ preventScroll: true }); };
+}
+
+function nadieLlego(datos) {
+  const abre = datos.estado === "en_curso" && datos.es_dia && datos.hora_apertura
+    ? `Las puertas abren a las ${escH(apertura(datos.hora_apertura))}. ` : "";
+  return estado({
+    icono: ICONO.personas, titulo: "Todavía no llegó nadie", grande: false,
+    textos: `<p class="mr-chico">${abre}La lista se actualiza sola: no hace falta recargar.</p>`,
+  });
+}
+
+function listaDePresentes(todos) {
+  const esMio = p => p.recorrido.some(r => r.id === eq.yo.id);
+  const grupos = { todos, sin: todos.filter(p => !p.recorrido.length), mios: todos.filter(esMio) };
+  const q = normalizar(eq.q);
+  const visibles = grupos[eq.filtro].filter(p => !q || q.split(" ").every(w => normalizar(p.razon_social).includes(w)));
+  const chip = (clave, texto) =>
+    `<button class="mr-chip" type="button" data-filtro="${clave}" aria-pressed="${eq.filtro === clave}">${texto} <span class="mr-num">${grupos[clave].length}</span></button>`;
+  const chips = `<div class="mr-chips" role="group" aria-label="Filtro">${chip("todos", "Todos")}${chip("sin", "Sin recorrido")}${chip("mios", "Míos")}</div>`;
+  if (visibles.length) return chips + visibles.map(p => tarjeta(p, esMio(p))).join("");
+  if (q) return chips + estado({ icono: ICONO.lupa, titulo: `No encontramos “${escH(eq.q.trim())}”`, grande: false });
+  if (eq.filtro === "mios") {
+    return chips + estado({
+      icono: ICONO.personas, titulo: "Todavía no te anotaste con nadie", grande: false,
+      textos: `<p class="mr-chico">Tocá “Me anoto” en un presente para que figure que le hacés el recorrido.</p>`
+        + `<button class="mr-boton mr-boton--secundario" type="button" data-filtro="sin">Ver sin recorrido</button>`,
+    });
+  }
+  return chips + estado({ icono: ICONO.ok, titulo: "Todos los presentes tienen recorrido", grande: false });
+}
+
+function antiguedad(desde) {
+  if (!desde) return "No pudimos traer la lista.";
+  const min = Math.floor((Date.now() - desde) / 60000);
+  return min < 1 ? "La lista es de hace menos de un minuto." : min === 1 ? "La lista es de hace 1 min." : `La lista es de hace ${min} min.`;
+}
+
+/* Una tarjeta de presente (pieza FilaPresente del diseño). */
+function tarjeta(p, mio) {
+  const insignia = p.sin_codigo
+    ? `<span class="mr-insignia mr-categoria mr-categoria--sin-codigo">Alta sin código</span>`
+    : CATEGORIA_INSIGNIA[p.categoria]
+      ? `<span class="mr-insignia mr-categoria mr-categoria--${CATEGORIA_INSIGNIA[p.categoria][0]}">${CATEGORIA_INSIGNIA[p.categoria][1]}</span>` : "";
+  const pedido = p.recorrido.filter(r => r.tomo_pedido).map(r => r.id === eq.yo.id ? "vos" : corto(r.nombre));
+  const meta = `<b>${escH(hora(p.llegada))}</b><span>· ${escH(personas(p.cantidad))}</span>`
+    + (p.zona ? `<span>· ${escH(p.zona)}</span>` : "") + insignia
+    + (pedido.length ? `<span class="mr-insignia mr-insignia--violeta">Pedido: ${escH(enumerar(pedido))}</span>` : "");
+  const quienes = p.recorrido.filter(r => r.id !== eq.yo.id).map(r => corto(r.nombre)).concat(mio ? ["vos"] : []);
+  const atiende = quienes.length
+    ? `<p class="mr-atiende mr-atiende--recorrido">Recorrido: <b>${escH(enumerar(quienes))}</b></p>`
+    : p.vendedor ? `<p class="mr-atiende">Lo atiende <b>${escH(p.vendedor)}</b>, su vendedor</p>`
+      : `<p class="mr-atiende">Sin vendedor asignado</p>`;
+  const boton = mio
+    ? `<button class="mr-boton mr-boton--secundario" type="button" data-bajar="${escH(p.visita_id)}">Me bajo</button>`
+    : `<button class="mr-boton mr-boton--anotarme" type="button" data-anotar="${escH(p.visita_id)}">Me anoto</button>`;
+  const yoTome = mio && p.recorrido.some(r => r.id === eq.yo.id && r.tomo_pedido);
+  return `<article class="mr-presente${mio ? " mr-presente--mio" : ""}" data-visita="${escH(p.visita_id)}"><div class="mr-presente-meta">${meta}</div>`
+    + `<h3 class="mr-presente-razon">${escH(p.razon_social)}</h3>`
+    + `<div class="mr-presente-pie">${atiende}${boton}</div>`
+    // decidido el 07/10: solo si alguien del equipo (no el vendedor) tomó el pedido
+    + (mio ? `<label class="mr-interruptor"><input type="checkbox" data-pedido="${escH(p.visita_id)}"${yoTome ? " checked" : ""}> Tomé el pedido</label>` : "")
+    + `</article>`;
+}
+
+/* Me anoto / Me bajo / Tomé el pedido. Todo pasa por la cola, en orden:
+   primero queda guardado en el celular (si se cierra la app no se pierde),
+   se ve en el acto y sale enseguida; sin señal, sale cuando vuelve. Lo último
+   que se tocó en una visita es lo que vale. */
+function accionEquipo(fn, visita, tomo) {
+  const args = { p_clave: eq.clave, p_equipo: eq.yo.id, p_visita: visita };
+  if (fn === "expo_tome_pedido") args.p_tomo = !!tomo;
+  const misma = fn === "expo_tome_pedido" ? ["expo_tome_pedido"] : ["expo_anotarme", "expo_bajarme"];
+  descartarPendientes(i => misma.includes(i.fn) && i.args.p_equipo === args.p_equipo && i.args.p_visita === visita);
+  const id = encolar(fn, args);
+  const { vista } = eq;
+  alSalir(id, vista, (r, error) => {
+    if (error) { eq.tostada = null; eq.aviso = mensajeDe(error); }
+    cargarPresentes(vista);   // lo que quedó de verdad en la base
+  });
+  eq.aviso = "";
+  mostrarTostada(fn, visita);
+  repintarPresentes();
+  procesarCola();
+}
+
+/* "Te anotaste con Libreria Papeltec · Deshacer", unos segundos. */
+function mostrarTostada(fn, visita) {
+  if (fn === "expo_bajarme") eq.tostada = null;
+  if (fn !== "expo_anotarme") return;
+  const p = eq.datos && (eq.datos.presentes || []).find(x => x.visita_id === visita);
+  if (!p) return;
+  const tostada = eq.tostada = { texto: "Te anotaste con " + nombreDelLocal(p.razon_social), visita };
+  setTimeout(() => { if (eq && eq.tostada === tostada) { eq.tostada = null; repintarPresentes(); } }, TOSTADA_MS);
+}
+
+/* ==========================================================================
    NAVEGACIÓN
    ========================================================================== */
 /* Nunca se acepta un token de sesión pegado en la URL: se borra sin leerlo. */
@@ -1262,15 +1609,18 @@ function leerRuta() {
 function navegar() {
   const r = leerRuta();
   if ("cartel" in r) {
-    // el QR del cartel: la clave se guarda y sale de la URL (no queda en capturas ni en el historial)
-    if (TOKEN_RE.test(r.cartel)) guardarLocal(CLAVE_CARTEL, r.cartel);
-    history.replaceState(null, "", location.pathname + location.search + "#buscar");
+    claveDelLink(r.cartel, CLAVE_CARTEL, "#buscar");   // el QR del cartel
     return pantallaBuscar();
   }
   if ("t" in r) return abrirCliente(r.t);
   if ("buscar" in r) return pantallaBuscar();
   if ("alta" in r) return pantallaAlta();
-  return claveCartel() ? pantallaBuscar() : pantallaInvalido();
+  if ("equipo" in r) {
+    claveDelLink(r.equipo, CLAVE_EQUIPO, "#recorrido");   // el link del equipo de recorrido
+    return pantallaRecorrido();
+  }
+  if ("recorrido" in r) return pantallaRecorrido();
+  return claveCartel() ? pantallaBuscar() : claveEquipo() ? pantallaRecorrido() : pantallaInvalido();
 }
 
 window.addEventListener("hashchange", navegar);

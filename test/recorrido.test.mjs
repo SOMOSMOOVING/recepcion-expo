@@ -146,6 +146,14 @@ test('con la clave de otra edición no se baja a nadie', async () => {
   assert.equal(await uno(db, `select count(*)::int from expo_recorridos`), 1);
 });
 
+test('no se anota en una visita de ayer (la lista vieja guardada en el celular)', async () => {
+  const { db, s } = await base();
+  await db.query(`insert into expo_visitas (invitado_id, dia, cantidad) values ($1, expo_hoy() - 1, 2)`, [s.papeltec.id]);
+  const ayer = await uno(db, `select id from expo_visitas`);
+  await assert.rejects(anon(db, 'expo_anotarme', CLAVE_EQUIPO, s.equipo.sofia, ayer), /expo_visita_invalida/);
+  assert.equal(await uno(db, `select count(*)::int from expo_recorridos`), 0);
+});
+
 test('no se anota en una visita de otra edición', async () => {
   const { db, s } = await base();
   await db.query(`update expo_ediciones set estado = 'cerrada'`);

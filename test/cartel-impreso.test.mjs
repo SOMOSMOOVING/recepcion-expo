@@ -35,6 +35,15 @@ test('una clave mal escrita no arma el cartel', { skip: !haySegno && 'falta segn
   assert.match(r.stderr, /32 caracteres hexadecimales/);
 });
 
+test('link del equipo: el SQL guarda el hash de la clave que va en el link, solo en la edición de ese año', () => {
+  const r = spawnSync('python', ['scripts/link_equipo.py', '--anio', '2027'], { cwd: RAIZ, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const clave = r.stdout.match(/#equipo=([0-9a-f]{32})/)[1];
+  const hash = r.stdout.match(/clave_equipo_hash = '([0-9a-f]{64})'/)[1];
+  assert.equal(hash, createHash('sha256').update(clave).digest('hex'));
+  assert.match(r.stdout, /where anio = 2027 and estado <> 'cerrada'/);
+});
+
 test('la carpeta de carteles no se sube al repo (tienen la clave adentro)', () => {
   assert.match(readFileSync(join(RAIZ, '.gitignore'), 'utf8'), /^cartel\/$/m);
 });

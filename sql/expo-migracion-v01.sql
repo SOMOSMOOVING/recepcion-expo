@@ -976,6 +976,7 @@ begin
       from public.expo_visitas v
       join public.expo_invitados i on i.id = v.invitado_id
      where v.id = visita and i.edicion_id = e.id
+       and v.dia = public.expo_hoy()   -- con la lista de ayer guardada en el celular no se anota en una visita de ayer
   ) then
     raise exception 'expo_visita_invalida';
   end if;
