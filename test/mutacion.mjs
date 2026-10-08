@@ -1,13 +1,14 @@
-// Prueba de mutación: saca (o afloja) cada línea que protege algo y verifica
-// que el test que la cuida se dé cuenta. Si una mutación "sobrevive", ese
-// test no sirve.
+// Prueba de mutación: saca (o afloja) cada línea que protege algo, en el SQL
+// o en el index.html, y verifica que el test que la cuida se dé cuenta. Si una
+// mutación "sobrevive", ese test no sirve.
 //
 //   npm run mutacion                 todas
 //   npm run mutacion -- vincular     solo las que tengan "vincular" en el nombre
 //
 // Para que una mutación cuente como atrapada no alcanza con que "algo falle":
 // · el texto a mutar tiene que aparecer UNA sola vez en la última migración
-//   (si el SQL cambió y ya no está, se avisa en vez de pasar en silencio);
+//   o en el index.html (si el código cambió y ya no está, se avisa en vez de
+//   pasar en silencio);
 // · el SQL mutado tiene que cargar (si no carga, fallaría todo y no probaría
 //   nada);
 // · y entre los tests que fallan tiene que estar el de "espera".
@@ -20,9 +21,13 @@ import { archivosMigracion } from './db.mjs';
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-// Se muta la última migración; las anteriores corren tal cual (ver db.mjs).
-const ARCHIVO = archivosMigracion().at(-1);
-const ORIGINAL = readFileSync(ARCHIVO, 'utf8');
+// Del SQL se muta la última migración; las anteriores corren tal cual (ver
+// db.mjs). De la página, el index.html (lo sirve test/navegador.mjs).
+const ARCHIVOS = {
+  sql: { ruta: archivosMigracion().at(-1), variable: 'EXPO_SQL' },
+  index: { ruta: join(RAIZ, 'index.html'), variable: 'EXPO_INDEX' },
+};
+for (const a of Object.values(ARCHIVOS)) a.original = readFileSync(a.ruta, 'utf8');
 
 const MUTACIONES = [
   // ── seguridad
@@ -309,6 +314,129 @@ $$;
     raise exception 'expo_no_es_dia_de_expo';
   end if;
   if p_tomo is null then`, poner: `  if p_tomo is null then` },
+  // ── página (index.html)
+  { nombre: 'página: escH no escapa <', archivo: 'index', prueba: 'checkin',
+    espera: 'se muestran como texto, nunca como HTML',
+    buscar: `.replace(/</g, "&lt;")`, poner: `` },
+  { nombre: 'página: la razón social se corta en vez de bajar de renglón', archivo: 'index', prueba: 'anchos',
+    espera: '320 px · check-in · razón social una palabra larguísima',
+    buscar: `.mr-razon { font-size: 28px; line-height: 33px; font-weight: 600; letter-spacing: .005em; overflow-wrap: anywhere;`,
+    poner: `.mr-razon { font-size: 28px; line-height: 33px; font-weight: 600; letter-spacing: .005em; overflow: hidden;` },
+  { nombre: 'página: la razón social larga no baja a 24 px', archivo: 'index', prueba: 'anchos',
+    espera: 'razón social más de 60 caracteres',
+    buscar: `const larga = texto.length > 60 ? " mr-razon--larga" : "";`, poner: `const larga = "";` },
+  { nombre: 'página: no parte la razón social en el primer " - "', archivo: 'index', prueba: 'anchos',
+    espera: 'razón social con guion',
+    buscar: `const partes = i > 0 ? [texto.slice(0, i), texto.slice(i + 3)] : [texto];`, poner: `const partes = [texto];` },
+  { nombre: 'página: acepta el #access_token de la URL', archivo: 'index', prueba: 'checkin',
+    espera: 'nunca acepta un #access_token',
+    buscar: `  if (PROHIBIDOS.some(k => p.has(k))) {`, poner: `  if (false) {` },
+  { nombre: 'página: sin señal frena en vez de guardar en el celular', archivo: 'index', prueba: 'checkin',
+    espera: 'sin señal: deja pasar, guarda en el celular',
+    buscar: `    const id = encolar("expo_registrar_visita", { p_token: token, p_cantidad: n, p_llegada: llegada });`,
+    poner: `    return pantallaError(e);` },
+  { nombre: 'página: el reintento no manda la hora en que llegaron', archivo: 'index', prueba: 'checkin',
+    espera: 'sin señal: deja pasar, guarda en el celular',
+    buscar: `{ p_token: token, p_cantidad: n, p_llegada: llegada }`, poner: `{ p_token: token, p_cantidad: n, p_llegada: null }` },
+  { nombre: 'página: lo guardado sin señal se pierde al cerrar la página', archivo: 'index', prueba: 'checkin',
+    espera: 'si se cierra la página',
+    buscar: `  if (guardado) return esperarRegistro(guardado);`, poner: `` },
+  { nombre: 'página: sin señal al abrir no usa lo que ya se había visto', archivo: 'index', prueba: 'checkin',
+    espera: 'sin señal al abrir',
+    buscar: `    d = alDiaDeHoy(leerLocal(CACHE_INV(token)));   // lo último que se vio con señal, si hubo`, poner: `    d = null;` },
+  { nombre: 'página: el botón ocupado se puede tocar de nuevo', archivo: 'index', prueba: 'checkin',
+    espera: 'dos toques seguidos registran una sola vez',
+    buscar: `  boton.disabled = true;
+  boton.setAttribute("aria-busy", "true");`, poner: `  boton.setAttribute("aria-busy", "true");` },
+  { nombre: 'página: "ya estaban registrados" se muestra como recién registrado', archivo: 'index', prueba: 'checkin',
+    espera: 'el mismo día no se registra dos veces',
+    buscar: `    return r.nueva ? pantallaRegistrado(r) : pantallaYaRegistrado(r);`, poner: `    return pantallaRegistrado(r);` },
+  { nombre: 'página: un token mal formado se manda a la base', archivo: 'index', prueba: 'checkin',
+    espera: 'un token mal formado ni se manda a la base',
+    buscar: `  if (!TOKEN_RE.test(token || "")) return pantallaInvalido();`, poner: `` },
+  { nombre: 'página: no sigue el modo oscuro del celular', archivo: 'index', prueba: 'checkin',
+    espera: 'modo oscuro',
+    buscar: `aplicarTema();
+mqOscuro.addEventListener`, poner: `mqOscuro.addEventListener` },
+  { nombre: 'página: QR inválido ofrece buscar aunque no haya clave del cartel', archivo: 'index', prueba: 'checkin',
+    espera: 'QR inválido',
+    buscar: `  const conCartel = !!claveCartel();`, poner: `  const conCartel = true;` },
+  { nombre: 'página: busca con menos de 3 letras', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'con menos de 3 letras no busca',
+    buscar: `const alcanzaParaBuscar = t => normalizar(t).replace(/ /g, "").length >= MIN_LETRAS_BUSQUEDA;`,
+    poner: `const alcanzaParaBuscar = t => normalizar(t).replace(/ /g, "").length >= 1;` },
+  { nombre: 'página: muestra resultados con tokens raros', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'un resultado con token raro no se muestra',
+    buscar: `  filas = (filas || []).filter(f => TOKEN_RE.test(f.token || ""));`, poner: `  filas = filas || [];` },
+  { nombre: 'página: la clave del cartel queda en la URL', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'el QR del cartel guarda la clave',
+    buscar: `    history.replaceState(null, "", location.pathname + location.search + "#buscar");`, poner: `` },
+  { nombre: 'página: el resaltado no escapa', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'resultados con nombres raros',
+    buscar: `    html += escH(c);`, poner: `    html += c;` },
+  { nombre: 'página: el alta no manda clave para no duplicar', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'alta rápida: pide nombre y empresa',
+    buscar: `p_clave: crypto.randomUUID(),`, poner: `p_clave: null,` },
+  { nombre: 'página: el alta sin señal frena en vez de guardar', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'alta rápida sin señal',
+    buscar: `    const id = encolar("expo_alta_rapida", args);`, poner: `    return pantallaError(e);` },
+  { nombre: 'página: el alta deja pasar sin nombre', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'alta rápida: pide nombre y empresa',
+    buscar: `const faltaNombre = nombre.length < MIN_LARGO_NOMBRE,`, poner: `const faltaNombre = false,` },
+
+  { nombre: 'página: usa lo guardado de otro día como si fuera de hoy', archivo: 'index', prueba: 'checkin',
+    espera: 'sin señal con lo guardado ayer',
+    buscar: `  if (visto === hoy) return d;`, poner: `  return d;` },
+  { nombre: 'página: lo guardado antes de la expo no pasa a "en curso" el día de la expo', archivo: 'index', prueba: 'checkin',
+    espera: 'sin señal con lo guardado de antes de la expo',
+    buscar: `    actual.estado = "en_curso";`, poner: `` },
+  { nombre: 'página: lo que sale tarde de la cola pisa cualquier pantalla', archivo: 'index', prueba: 'checkin',
+    espera: 'no pisa la pantalla de otro cliente',
+    buscar: `  alEnviar[id] = (r, error) => { if (vistaN === vista) hacer(r, error); };`, poner: `  alEnviar[id] = (r, error) => hacer(r, error);` },
+  { nombre: 'página: un "no vamos" viejo de la cola pisa la decisión nueva', archivo: 'index', prueba: 'checkin',
+    espera: 'no pisa el "sí vamos" de después',
+    buscar: `  descartarPendientes("expo_confirmar", token);   // lo último que se decidió es lo que vale`, poner: `` },
+  { nombre: 'página: al reabrir no muestra la confirmación sin enviar', archivo: 'index', prueba: 'checkin',
+    espera: 'al reabrir con una confirmación sin enviar',
+    buscar: `    const sinEnviar = pendiente("expo_confirmar", cli.token);`, poner: `    const sinEnviar = null;` },
+  { nombre: 'página: no avisa "Volvimos hoy" a quien vino otro día', archivo: 'index', prueba: 'checkin',
+    espera: 'ya vino otro día',
+    buscar: `  if (d.visita_anterior) return pantallaRegistrar({ verbo: "Volvimos hoy", anterior: d.visita_anterior });`, poner: `` },
+  { nombre: 'página: en curso pero hoy no hay expo, igual ofrece registrarse', archivo: 'index', prueba: 'checkin',
+    espera: 'en curso pero hoy no hay expo',
+    buscar: `  if (!dias.includes(d.edicion.hoy)) return pantallaFueraDeDia();`, poner: `` },
+  { nombre: 'página: expo terminada no dice quién es el vendedor', archivo: 'index', prueba: 'checkin',
+    espera: 'expo terminada: deriva al vendedor',
+    buscar: `  const quien = d.vendedor ?`, poner: `  const quien = false ?` },
+  { nombre: 'página: corregir manda la cantidad vieja', archivo: 'index', prueba: 'checkin',
+    espera: 'corregir la cantidad',
+    buscar: `rpc("expo_corregir_cantidad", { p_token: token, p_cantidad: n })`, poner: `rpc("expo_corregir_cantidad", { p_token: token, p_cantidad: actual })` },
+  { nombre: 'página: "No vamos a poder ir" manda que sí van', archivo: 'index', prueba: 'checkin',
+    espera: 'antes de la expo: confirmar',
+    buscar: `  const args = { p_token: token, p_cantidad: va ? n : null, p_va: va };`, poner: `  const args = { p_token: token, p_cantidad: va ? n : null, p_va: true };` },
+  { nombre: 'página: el tope por minuto se toma como definitivo y el alta se pierde', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'justo con el tope por minuto',
+    buscar: `const PASAJEROS = new Set(["expo_demasiadas_altas_minuto"]);`, poner: `const PASAJEROS = new Set([]);` },
+  { nombre: 'página: una búsqueda vieja pisa la nueva', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'una búsqueda vieja que contesta tarde',
+    buscar: `  if (n !== busquedaN) return;   // llegó tarde: ya se escribió otra cosa`, poner: `` },
+  { nombre: 'página: una clave del cartel vencida queda guardada', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'si la clave del cartel dejó de valer',
+    buscar: `      borrarLocal(CLAVE_CARTEL);`, poner: `` },
+  { nombre: 'página: el buscador abre sin la clave del cartel', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'sin la clave del cartel no hay buscador',
+    buscar: `function pantallaBuscar() {
+  if (!claveCartel()) return pantallaSinClaveCartel();`, poner: `function pantallaBuscar() {` },
+  { nombre: 'página: después de un rechazo el botón del alta queda trabado', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'alta rápida que la base rechaza',
+    buscar: `      liberar(boton, "Registrarme · " + cuantos(n));`, poner: `` },
+  { nombre: 'página: la versión de la app no es la del service worker', archivo: 'index', prueba: 'app',
+    espera: 'el service worker tiene la misma versión',
+    buscar: `const APP_VERSION = "`, poner: `const APP_VERSION = "otra-` },
+  { nombre: 'página: un logo nuevo que el service worker no guarda', archivo: 'index', prueba: 'app',
+    espera: 'el service worker guarda los logos',
+    buscar: `const LOGO = { claro: "assets/logo-claro.png"`, poner: `const LOGO = { claro: "assets/logo-nuevo.gif"` },
+
   { nombre: 'recorrido: cambiar la clave no invalida la vieja', prueba: 'recorrido',
     espera: 'la vieja deja de andar en el acto',
     buscar: `     set clave_equipo_hash = public.expo__hash_clave(clave)
@@ -332,18 +460,19 @@ const dir = mkdtempSync(join(tmpdir(), 'expo-mutacion-'));
 let sobrevivieron = 0, rotas = 0;
 
 for (const m of MUTACIONES.filter((x) => !filtro || x.nombre.includes(filtro))) {
-  const veces = ORIGINAL.split(m.buscar).length - 1;
+  const archivo = ARCHIVOS[m.archivo || 'sql'];
+  const veces = archivo.original.split(m.buscar).length - 1;
   if (veces !== 1) {
-    console.log(`?  ${m.nombre}: el texto aparece ${veces} veces en ${basename(ARCHIVO)} (tiene que ser 1)`);
+    console.log(`?  ${m.nombre}: el texto aparece ${veces} veces en ${basename(archivo.ruta)} (tiene que ser 1)`);
     rotas++;
     continue;
   }
-  const mutado = join(dir, 'mutado.sql');
+  const mutado = join(dir, 'mutado' + (m.archivo === 'index' ? '.html' : '.sql'));
   // con una función: un texto de reemplazo con $$ (cierre de función SQL) se
   // volvería $ si se pasara como string
-  writeFileSync(mutado, ORIGINAL.replace(m.buscar, () => m.poner));
+  writeFileSync(mutado, archivo.original.replace(m.buscar, () => m.poner));
 
-  const error = carga(mutado);
+  const error = m.archivo === 'index' ? null : carga(mutado);
   if (error) {
     console.log(`?  ${m.nombre}: el SQL mutado no carga (${error.trim()})`);
     rotas++;
@@ -351,7 +480,7 @@ for (const m of MUTACIONES.filter((x) => !filtro || x.nombre.includes(filtro))) 
   }
 
   const r = spawnSync(process.execPath, [...NODE_TEST, `test/${m.prueba}.test.mjs`],
-    { cwd: RAIZ, env: { ...process.env, EXPO_SQL: mutado }, encoding: 'utf8' });
+    { cwd: RAIZ, env: { ...process.env, [archivo.variable]: mutado }, encoding: 'utf8' });
   const fallaron = [...r.stdout.matchAll(/✖ (.+?) \(\d/g)].map((x) => x[1]);
   if (fallaron.some((t) => t.includes(m.espera))) {
     console.log(`✓  ${m.nombre}`);
