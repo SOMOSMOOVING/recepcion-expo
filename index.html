@@ -435,8 +435,7 @@ function borrarLocal(clave) {
    esperaba una clave nueva en la cola sale ahora. */
 const leerClave = nombre => { const c = leerLocal(nombre); return TOKEN_RE.test(c || "") ? c : null; };
 function claveDelLink(valor, nombre, destino) {
-  if (TOKEN_RE.test(valor) && !guardarLocal(nombre, valor)) return;
-  history.replaceState(null, "", location.pathname + location.search + destino);
+  if (!TOKEN_RE.test(valor) || guardarLocal(nombre, valor)) history.replaceState(null, "", location.pathname + location.search + destino);
   procesarCola();
 }
 
