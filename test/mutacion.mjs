@@ -1,13 +1,14 @@
-// Prueba de mutación: saca (o afloja) cada línea que protege algo y verifica
-// que el test que la cuida se dé cuenta. Si una mutación "sobrevive", ese
-// test no sirve.
+// Prueba de mutación: saca (o afloja) cada línea que protege algo, en el SQL
+// o en el index.html, y verifica que el test que la cuida se dé cuenta. Si una
+// mutación "sobrevive", ese test no sirve.
 //
 //   npm run mutacion                 todas
 //   npm run mutacion -- vincular     solo las que tengan "vincular" en el nombre
 //
 // Para que una mutación cuente como atrapada no alcanza con que "algo falle":
 // · el texto a mutar tiene que aparecer UNA sola vez en la última migración
-//   (si el SQL cambió y ya no está, se avisa en vez de pasar en silencio);
+//   o en el index.html (si el código cambió y ya no está, se avisa en vez de
+//   pasar en silencio);
 // · el SQL mutado tiene que cargar (si no carga, fallaría todo y no probaría
 //   nada);
 // · y entre los tests que fallan tiene que estar el de "espera".
@@ -20,9 +21,15 @@ import { archivosMigracion } from './db.mjs';
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-// Se muta la última migración; las anteriores corren tal cual (ver db.mjs).
-const ARCHIVO = archivosMigracion().at(-1);
-const ORIGINAL = readFileSync(ARCHIVO, 'utf8');
+// Del SQL se muta la última migración; las anteriores corren tal cual (ver
+// db.mjs). De la página, el index.html y el sw.js (los sirve
+// test/navegador.mjs).
+const ARCHIVOS = {
+  sql: { ruta: archivosMigracion().at(-1), variable: 'EXPO_SQL' },
+  index: { ruta: join(RAIZ, 'index.html'), variable: 'EXPO_INDEX' },
+  sw: { ruta: join(RAIZ, 'sw.js'), variable: 'EXPO_SW' },
+};
+for (const a of Object.values(ARCHIVOS)) a.original = readFileSync(a.ruta, 'utf8');
 
 const MUTACIONES = [
   // ── seguridad
@@ -41,6 +48,12 @@ const MUTACIONES = [
   { nombre: 'seguridad: no sacarle las funciones al anónimo', prueba: 'seguridad',
     espera: 'el anónimo solo puede ejecutar las funciones públicas',
     buscar: `execute format('revoke all on function %s from public, anon, authenticated', f);`, poner: '' },
+  { nombre: 'seguridad: la verificación no frena por funciones de más', prueba: 'seguridad', verificacion: true,
+    espera: 'la verificación de la migración frena',
+    buscar: `    raise exception 'VERIFICACIÓN: el anónimo puede ejecutar funciones que no son públicas: %', hay;`, poner: '' },
+  { nombre: 'seguridad: la verificación no mira todos los permisos de las tablas', prueba: 'seguridad', verificacion: true,
+    espera: 'la verificación de la migración frena',
+    buscar: `'select, insert, update, delete, truncate, references, trigger'`, poner: `'select'` },
   { nombre: 'seguridad: vincular sin chequear es_admin', prueba: 'seguridad',
     espera: 'vincular, marcar y cambiar la clave: solo recepción',
     buscar: `  if not public.es_admin() then
@@ -279,6 +292,10 @@ const MUTACIONES = [
   { nombre: 'recorrido: anotarse en una visita de otra edición', prueba: 'recorrido',
     espera: 'no se anota en una visita de otra edición',
     buscar: `     where v.id = visita and i.edicion_id = e.id`, poner: `     where v.id = visita` },
+  { nombre: 'recorrido: anotarse en una visita de ayer', prueba: 'recorrido',
+    espera: 'no se anota en una visita de ayer',
+    buscar: `       and v.dia = public.expo_hoy()   -- con la lista de ayer guardada en el celular no se anota en una visita de ayer`,
+    poner: '' },
   { nombre: 'recorrido: bajar a alguien con la clave de otra edición', prueba: 'recorrido',
     espera: 'con la clave de otra edición no se baja a nadie',
     buscar: `     and i.edicion_id = e.id;
@@ -309,12 +326,249 @@ $$;
     raise exception 'expo_no_es_dia_de_expo';
   end if;
   if p_tomo is null then`, poner: `  if p_tomo is null then` },
+  // ── página (index.html)
+  { nombre: 'página: escH no escapa <', archivo: 'index', prueba: 'checkin',
+    espera: 'se muestran como texto, nunca como HTML',
+    buscar: `.replace(/</g, "&lt;")`, poner: `` },
+  { nombre: 'página: la razón social se corta en vez de bajar de renglón', archivo: 'index', prueba: 'anchos',
+    espera: '320 px · check-in · razón social una palabra larguísima',
+    buscar: `.mr-razon { font-size: 28px; line-height: 33px; font-weight: 600; letter-spacing: .005em; overflow-wrap: anywhere;`,
+    poner: `.mr-razon { font-size: 28px; line-height: 33px; font-weight: 600; letter-spacing: .005em; overflow: hidden;` },
+  { nombre: 'página: la razón social larga no baja a 24 px', archivo: 'index', prueba: 'anchos',
+    espera: 'razón social más de 60 caracteres',
+    buscar: `const larga = texto.length > 60 ? " mr-razon--larga" : "";`, poner: `const larga = "";` },
+  { nombre: 'página: acepta el #access_token de la URL', archivo: 'index', prueba: 'checkin',
+    espera: 'nunca acepta un #access_token',
+    buscar: `  if (PROHIBIDOS.some(k => p.has(k))) {`, poner: `  if (false) {` },
+  { nombre: 'página: sin señal frena en vez de guardar en el celular', archivo: 'index', prueba: 'checkin',
+    espera: 'sin señal: deja pasar, guarda en el celular',
+    buscar: `    const id = encolar("expo_registrar_visita", { p_token: token, p_cantidad: n, p_llegada: llegada });`,
+    poner: `    return pantallaError(e);` },
+  { nombre: 'página: el reintento no manda la hora en que llegaron', archivo: 'index', prueba: 'checkin',
+    espera: 'sin señal: deja pasar, guarda en el celular',
+    buscar: `{ p_token: token, p_cantidad: n, p_llegada: llegada }`, poner: `{ p_token: token, p_cantidad: n, p_llegada: null }` },
+  { nombre: 'página: lo guardado sin señal se pierde al cerrar la página', archivo: 'index', prueba: 'checkin',
+    espera: 'si se cierra la página',
+    buscar: `  if (guardado) return esperarRegistro(guardado);`, poner: `` },
+  { nombre: 'página: sin señal al abrir no usa lo que ya se había visto', archivo: 'index', prueba: 'checkin',
+    espera: 'sin señal al abrir',
+    buscar: `    d = alDiaDeHoy(leerLocal(CACHE_INV(token)));   // lo último que se vio con señal, si hubo`, poner: `    d = null;` },
+  { nombre: 'página: el botón ocupado se puede tocar de nuevo', archivo: 'index', prueba: 'checkin',
+    espera: 'dos toques seguidos registran una sola vez',
+    buscar: `  boton.disabled = true;
+  boton.setAttribute("aria-busy", "true");`, poner: `  boton.setAttribute("aria-busy", "true");` },
+  { nombre: 'página: "ya estaban registrados" se muestra como recién registrado', archivo: 'index', prueba: 'checkin',
+    espera: 'el mismo día no se registra dos veces',
+    buscar: `    return r.nueva ? pantallaRegistrado(r) : pantallaYaRegistrado(r);`, poner: `    return pantallaRegistrado(r);` },
+  { nombre: 'página: un token mal formado se manda a la base', archivo: 'index', prueba: 'checkin',
+    espera: 'un token mal formado ni se manda a la base',
+    buscar: `  if (!TOKEN_RE.test(token || "")) return pantallaInvalido();`, poner: `` },
+  { nombre: 'página: no sigue el modo oscuro del celular', archivo: 'index', prueba: 'checkin',
+    espera: 'modo oscuro',
+    buscar: `aplicarTema();
+mqOscuro.addEventListener`, poner: `mqOscuro.addEventListener` },
+  { nombre: 'página: QR inválido ofrece buscar aunque no haya clave del cartel', archivo: 'index', prueba: 'checkin',
+    espera: 'QR inválido',
+    buscar: `  const conCartel = !!claveCartel();`, poner: `  const conCartel = true;` },
+  { nombre: 'página: busca con menos de 3 letras', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'con menos de 3 letras no busca',
+    buscar: `const alcanzaParaBuscar = t => normalizar(t).replace(/ /g, "").length >= MIN_LETRAS_BUSQUEDA;`,
+    poner: `const alcanzaParaBuscar = t => normalizar(t).replace(/ /g, "").length >= 1;` },
+  { nombre: 'página: muestra resultados con tokens raros', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'un resultado con token raro no se muestra',
+    buscar: `  filas = (filas || []).filter(f => TOKEN_RE.test(f.token || ""));`, poner: `  filas = filas || [];` },
+  { nombre: 'página: el resaltado no escapa', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'resultados con nombres raros',
+    buscar: `    html += escH(c);`, poner: `    html += c;` },
+  { nombre: 'página: el alta no manda clave para no duplicar', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'alta rápida: pide nombre y empresa',
+    buscar: `p_clave: crypto.randomUUID(),`, poner: `p_clave: null,` },
+  { nombre: 'página: el alta sin señal frena en vez de dejar pasar', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'alta rápida sin señal: deja pasar',
+    buscar: `    if (item && vistaN === vista) esperarAlta(item);`, poner: `    if (vistaN === vista) pantallaError(e);` },
+  { nombre: 'página: el alta deja pasar sin nombre', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'alta rápida: pide nombre y empresa',
+    buscar: `const faltaNombre = nombre.length < MIN_LARGO_NOMBRE,`, poner: `const faltaNombre = false,` },
+
+  { nombre: 'página: usa lo guardado de otro día como si fuera de hoy', archivo: 'index', prueba: 'checkin',
+    espera: 'sin señal con lo guardado ayer',
+    buscar: `  if (visto === hoy) return d;`, poner: `  return d;` },
+  { nombre: 'página: lo guardado antes de la expo no pasa a "en curso" el día de la expo', archivo: 'index', prueba: 'checkin',
+    espera: 'sin señal con lo guardado de antes de la expo',
+    buscar: `    actual.estado = "en_curso";`, poner: `` },
+  { nombre: 'página: lo que sale tarde de la cola pisa cualquier pantalla', archivo: 'index', prueba: 'checkin',
+    espera: 'no pisa la pantalla de otro cliente',
+    buscar: `  alEnviar[id] = (r, error) => { if (vistaN === vista) hacer(r, error); };`, poner: `  alEnviar[id] = (r, error) => hacer(r, error);` },
+  { nombre: 'página: al reabrir no muestra la confirmación sin enviar', archivo: 'index', prueba: 'checkin',
+    espera: 'al reabrir con una confirmación sin enviar',
+    buscar: `    const sinEnviar = pendiente("expo_confirmar", cli.token);`, poner: `    const sinEnviar = null;` },
+  { nombre: 'página: no avisa "Volvimos hoy" a quien vino otro día', archivo: 'index', prueba: 'checkin',
+    espera: 'ya vino otro día',
+    buscar: `  if (d.visita_anterior) return pantallaRegistrar({ verbo: "Volvimos hoy", anterior: d.visita_anterior });`, poner: `` },
+  { nombre: 'página: en curso pero hoy no hay expo, igual ofrece registrarse', archivo: 'index', prueba: 'checkin',
+    espera: 'en curso pero hoy no hay expo',
+    buscar: `  if (!dias.includes(d.edicion.hoy)) return pantallaFueraDeDia();`, poner: `` },
+  { nombre: 'página: expo terminada no dice quién es el vendedor', archivo: 'index', prueba: 'checkin',
+    espera: 'expo terminada: deriva al vendedor',
+    buscar: `  const quien = d.vendedor ?`, poner: `  const quien = false ?` },
+  { nombre: 'página: corregir manda la cantidad vieja', archivo: 'index', prueba: 'checkin',
+    espera: 'corregir la cantidad',
+    buscar: `rpc("expo_corregir_cantidad", { p_token: token, p_cantidad: n })`, poner: `rpc("expo_corregir_cantidad", { p_token: token, p_cantidad: actual })` },
+  { nombre: 'página: "No vamos a poder ir" manda que sí van', archivo: 'index', prueba: 'checkin',
+    espera: 'antes de la expo: confirmar',
+    buscar: `  const args = { p_token: token, p_cantidad: va ? n : null, p_va: va };`, poner: `  const args = { p_token: token, p_cantidad: va ? n : null, p_va: true };` },
+  { nombre: 'página: el tope por minuto se toma como definitivo y el alta se pierde', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'justo con el tope por minuto',
+    buscar: `const PASAJEROS = new Set(["expo_demasiadas_altas_minuto"]);`, poner: `const PASAJEROS = new Set([]);` },
+  { nombre: 'página: una búsqueda vieja pisa la nueva', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'una búsqueda vieja que contesta tarde',
+    buscar: `  if (n !== busquedaN) return;   // llegó tarde: ya se escribió otra cosa`, poner: `` },
+  { nombre: 'página: una clave del cartel vencida queda guardada', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'si la clave del cartel dejó de valer',
+    buscar: `      borrarLocal(CLAVE_CARTEL);`, poner: `` },
+  { nombre: 'página: el buscador abre sin la clave del cartel', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'sin la clave del cartel no hay buscador',
+    buscar: `function pantallaBuscar() {
+  if (!claveCartel()) return pantallaSinClaveCartel();`, poner: `function pantallaBuscar() {` },
+  { nombre: 'página: después de un rechazo el botón del alta queda trabado', archivo: 'index', prueba: 'cartel-pantalla',
+    espera: 'alta rápida que la base rechaza',
+    buscar: `    liberar(boton, "Registrarme · " + cuantos(n));`, poner: `` },
+  { nombre: 'página: la versión de la app no es la del service worker', archivo: 'index', prueba: 'app',
+    espera: 'el service worker tiene la misma versión',
+    buscar: `const APP_VERSION = "`, poner: `const APP_VERSION = "otra-` },
+  { nombre: 'página: un logo nuevo que el service worker no guarda', archivo: 'index', prueba: 'app',
+    espera: 'el service worker guarda los logos',
+    buscar: `const LOGO = { claro: "assets/logo-claro.png"`, poner: `const LOGO = { claro: "assets/logo-nuevo.gif"` },
+
+  // ── página: equipo de recorrido
+  { nombre: "equipo: el vendedor aparece como si hubiera hecho el recorrido", archivo: 'index', prueba: 'recorrido-pantalla',
+    espera: "\"Lo atiende su vendedor\" por defecto",
+    buscar: ".concat(mio ? [\"vos\"] : []);", poner: ".concat(mio ? [\"vos\"] : []).concat(p.vendedor ? [p.vendedor] : []);" },
+  { nombre: "equipo: \"Me anoto\" no manda quién es", archivo: 'index', prueba: 'recorrido-pantalla',
+    espera: "\"Me anoto\": se ve en el acto",
+    buscar: "const args = { p_equipo: eq.yo.id, p_visita: visita };", poner: "const args = { p_equipo: null, p_visita: visita };" },
+  { nombre: "equipo: la razón social de la tarjeta sin escapar", archivo: 'index', prueba: 'recorrido-pantalla',
+    espera: "nombres y datos de la base escapados",
+    buscar: "<h3 class=\"mr-presente-razon\">${escH(p.razon_social)}</h3>", poner: "<h3 class=\"mr-presente-razon\">${p.razon_social}</h3>" },
+  { nombre: "equipo: los nombres del equipo sin escapar", archivo: 'index', prueba: 'recorrido-pantalla',
+    espera: "nombres y datos de la base escapados",
+    buscar: "<span class=\"mr-resultado-razon\">${escH(p.nombre)}</span><span class=\"mr-chico\" style=\"display:block\">${escH(ROLES[p.rol] || \"\")}</span>", poner: "<span class=\"mr-resultado-razon\">${p.nombre}</span><span class=\"mr-chico\" style=\"display:block\">${escH(ROLES[p.rol] || \"\")}</span>" },
+  { nombre: "equipo: \"Sin recorrido\" muestra todos", archivo: 'index', prueba: 'recorrido-pantalla',
+    espera: "filtros: Sin recorrido y Míos",
+    buscar: "sin: todos.filter(p => !p.recorrido.length)", poner: "sin: todos" },
+  { nombre: "equipo: el buscador de presentes no filtra", archivo: 'index', prueba: 'recorrido-pantalla',
+    espera: "buscar presente filtra",
+    buscar: ".filter(p => !q || q.split(\" \").every(w => normalizar(p.razon_social).includes(w)));", poner: ";" },
+  { nombre: "equipo: \"Tomé el pedido\" aparece en presentes ajenos", archivo: 'index', prueba: 'recorrido-pantalla',
+    espera: "\"Tomé el pedido\": solo en los míos",
+    buscar: "(mio ? `<label class=\"mr-interruptor\">", poner: "(true ? `<label class=\"mr-interruptor\">" },
+  { nombre: "equipo: quien salió del equipo sigue elegido", archivo: 'index', prueba: 'recorrido-pantalla',
+    espera: "si la persona ya no está en el equipo",
+    buscar: "      borrarLocal(YO);   // ya no está en el equipo activo: que vuelva a elegir", poner: "" },
+  { nombre: "página: la clave del cartel queda en la URL", archivo: 'index', prueba: "cartel-pantalla",
+    espera: "el QR del cartel guarda la clave",
+    buscar: "claveDelLink(r.cartel, CLAVE_CARTEL, \"#buscar\");", poner: "guardarLocal(CLAVE_CARTEL, r.cartel);" },
+  { nombre: "página: un \"no vamos\" viejo de la cola pisa la decisión nueva", archivo: 'index', prueba: "checkin",
+    espera: "no pisa el \"sí vamos\" de después",
+    buscar: "  descartarPendientes(misma);   // lo último que se decidió es lo que vale…", poner: "" },
+  { nombre: "página: no parte la razón social en el primer \" - \"", archivo: 'index', prueba: "anchos",
+    espera: "razón social con guion",
+    buscar: "  const partes = partirRazon(texto);", poner: "  const partes = [texto];" },
+  { nombre: "equipo: la clave del equipo queda en la URL", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "el link del equipo guarda la clave",
+    buscar: "claveDelLink(r.equipo, CLAVE_EQUIPO, \"#recorrido\");", poner: "guardarLocal(CLAVE_EQUIPO, r.equipo);" },
+  { nombre: "equipo: una clave vencida queda guardada", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "una clave del equipo vencida",
+    buscar: "function claveEquipoVencida() {\n  borrarLocal(CLAVE_EQUIPO);", poner: "function claveEquipoVencida() {" },
+  { nombre: "equipo: un \"Me anoto\" viejo de la cola pisa el \"Me bajo\"", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "queda solo el \"Me bajo\"",
+    buscar: "  descartarPendientes(i => misma.includes(i.fn) && i.args.p_equipo === args.p_equipo && i.args.p_visita === visita);", poner: "" },
+  { nombre: "equipo: las acciones salen directo y se adelantan a la cola", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "salen en orden y queda el pedido",
+    buscar: "  const id = encolar(fn, args);\n  const { vista } = eq;\n  alSalir(id, vista, (r, error) => {\n    if (error) { eq.tostada = null; eq.aviso = mensajeDe(error); }\n    cargarPresentes(vista);   // lo que quedó de verdad en la base\n  });\n  eq.aviso = \"\";\n  mostrarTostada(fn, visita);\n  repintarPresentes();\n  procesarCola();\n}", poner: "  const { vista } = eq;\n  eq.aviso = \"\";\n  mostrarTostada(fn, visita);\n  repintarPresentes();\n  rpc(fn, args).catch(e => { if (e instanceof ErrorRed) { encolar(fn, args); repintarPresentes(); } else cargarPresentes(vista); });\n}" },
+  { nombre: "equipo: la actualización pisa lo que está en camino", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "no pisa un \"Me anoto\" que todavía está en camino",
+    buscar: "  accionesPendientes(eq.yo.id).forEach(i => aplicarAccion(datos, i, eq.yo.nombre));", poner: "" },
+  { nombre: "equipo: un rechazo de la base no se avisa", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "si la base rechaza lo que se tocó",
+    buscar: "    if (error) { eq.tostada = null; eq.aviso = mensajeDe(error); }", poner: "" },
+  { nombre: "equipo: la lista no se actualiza sola", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "se actualiza sola cada 15 segundos",
+    buscar: "const REFRESCO_PRESENTES_MS = 15000;", poner: "const REFRESCO_PRESENTES_MS = 150000;" },
+  { nombre: "equipo: \"Deshacer\" no baja a nadie", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "\"Me anoto\": se ve en el acto",
+    buscar: "  if (eq.tostada) $(\"#deshacer\").onclick = () => accionEquipo(\"expo_bajarme\", eq.tostada.visita);", poner: "" },
+  { nombre: "equipo: la tostada no se va sola", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "la tostada de \"Me anoto\" se va sola",
+    buscar: "const TOSTADA_MS = 6000;", poner: "const TOSTADA_MS = 6000000;" },
+  { nombre: "equipo: el foco se pierde al repintar", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "deja el foco",
+    buscar: "  volverAlFoco();\n", poner: "" },
+  { nombre: "equipo: usa la lista guardada de ayer", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "la lista guardada de hoy se usa",
+    buscar: " && guardados.datos.hoy === hoyAR();", poner: ";" },
+  { nombre: "equipo: los presentes salen en el orden de la base", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "los últimos arriba",
+    buscar: ".slice().sort((a, b) => new Date(b.llegada) - new Date(a.llegada));", poner: ".slice();" },
+  { nombre: "equipo: \"▾\" borra a la persona elegida", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "\"Volver\" deja la misma persona",
+    buscar: "  $(\"#quiensoy\").onclick = () => pantallaQuienSos();", poner: "  $(\"#quiensoy\").onclick = () => { borrarLocal(YO); pantallaQuienSos(); };" },
+  { nombre: "página: el registro sin señal se pierde si cambia de pantalla", archivo: 'index', prueba: "checkin",
+    espera: "el registro igual queda guardado",
+    buscar: "    if (e instanceof ErrorRed) {\n      const id = encolar(\"expo_registrar_visita\"", poner: "    if (vistaN !== vista) return;\n    if (e instanceof ErrorRed) {\n      const id = encolar(\"expo_registrar_visita\"" },
+  { nombre: "página: la corrección sin señal se pierde si cambia de pantalla", archivo: 'index', prueba: "checkin",
+    espera: "la corrección igual queda guardada",
+    buscar: "      const id = encolar(\"expo_corregir_cantidad\", { p_token: token, p_cantidad: n });   // siempre (ver registrar)\n      if (vistaN !== vista) return;", poner: "      if (vistaN !== vista) return;\n      const id = encolar(\"expo_corregir_cantidad\", { p_token: token, p_cantidad: n });" },
+  { nombre: "página: la confirmación sin señal se pierde si cambia de pantalla", archivo: 'index', prueba: "checkin",
+    espera: "la confirmación igual queda guardada",
+    buscar: "    const id = encolar(\"expo_confirmar\", args);   // siempre (ver registrar)\n    if (vistaN !== vista) return;", poner: "    if (vistaN !== vista) return;\n    const id = encolar(\"expo_confirmar\", args);" },
+  { nombre: "página: un 404 se toma como rechazo y se tira lo guardado", archivo: 'index', prueba: "checkin",
+    espera: "un 404",
+    buscar: "    const aProposito = motivo.startsWith(\"expo_\") && !PASAJEROS.has(motivo);", poner: "    const aProposito = !PASAJEROS.has(motivo);" },
+  { nombre: "página: sin almacenamiento, lo que no se pudo guardar se pierde", archivo: 'index', prueba: "checkin",
+    espera: "con el almacenamiento lleno, sin señal igual deja pasar",
+    buscar: "JSON.parse(enMemoria.has(clave) ? enMemoria.get(clave) : localStorage.getItem(clave))", poner: "JSON.parse(localStorage.getItem(clave))" },
+  { nombre: "página: la clave del link sale de la URL aunque no se pudo guardar", archivo: 'index', prueba: "cartel-pantalla",
+    espera: "con el almacenamiento bloqueado",
+    buscar: "  if (!TOKEN_RE.test(valor) || guardarLocal(nombre, valor)) history", poner: "  if (!TOKEN_RE.test(valor) || guardarLocal(nombre, valor) || true) history" },
+  { nombre: "página: con la clave vencida lo pendiente se tira", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "recepción cambió la clave",
+    buscar: "        if (CLAVE_VENCIDA.has(e.message)) { enPausa.add(item.id); continue; }\n", poner: "" },
+  { nombre: "página: el link nuevo no manda lo que esperaba la clave", archivo: 'index', prueba: "recorrido-pantalla",
+    espera: "recepción cambió la clave",
+    buscar: "location.search + destino);\n  procesarCola();", poner: "location.search + destino);" },
+  { nombre: "página: el alta se guarda recién cuando falla", archivo: 'index', prueba: "cartel-pantalla",
+    espera: "queda guardada ANTES de mandarla",
+    buscar: "  const id = encolar(\"expo_alta_rapida\", args);\n  ultimaBusqueda = \"\";", poner: "  const id = \"en-memoria\";\n  ultimaBusqueda = \"\";\n  setTimeout(() => encolar(\"expo_alta_rapida\", args), 8000);" },
+  { nombre: "página: al recargar, el alta que espera no se muestra", archivo: 'index', prueba: "cartel-pantalla",
+    espera: "sin señal y recarga",
+    buscar: "function pantallaAlta() {\n  if (!claveCartel()) return pantallaSinClaveCartel();\n  if (altaPendiente()) return esperarAlta(altaPendiente());\n", poner: "function pantallaAlta() {\n  if (!claveCartel()) return pantallaSinClaveCartel();\n" },
+  { nombre: "página: al volver al buscador, el alta que espera no se muestra", archivo: 'index', prueba: "cartel-pantalla",
+    espera: "si vuelve al buscador mientras espera, ve la que espera",
+    buscar: "function pantallaBuscar() {\n  if (!claveCartel()) return pantallaSinClaveCartel();\n  if (altaPendiente()) return esperarAlta(altaPendiente());\n", poner: "function pantallaBuscar() {\n  if (!claveCartel()) return pantallaSinClaveCartel();\n" },
+  { nombre: "página: registrado con señal no queda en lo guardado", archivo: 'index', prueba: "checkin",
+    espera: "al reabrir sin señal ya figura registrado",
+    buscar: "    recordarVisita(token, r);\n    if (vistaN !== vista) return;", poner: "    if (vistaN !== vista) return;" },
+  { nombre: "página: registrado por la cola no queda en lo guardado", archivo: 'index', prueba: "checkin",
+    espera: "al reabrir sin señal ya figura registrado",
+    buscar: "      if (!error && VISITA_DEL_CLIENTE.includes(item.fn)) recordarVisita(item.args.p_token, resultado);\n", poner: "" },
+  { nombre: "página: la corrección nueva no espera a la vieja en camino", archivo: 'index', prueba: "checkin",
+    espera: "una corrección vieja que la cola ya mandó",
+    buscar: "    await esperarEnVuelo(misma);   // la vieja que ya salió llega antes que esta\n", poner: "" },
+  { nombre: "página: el sí vamos no espera al no vamos en camino", archivo: 'index', prueba: "checkin",
+    espera: "llega antes que el \"sí vamos\"",
+    buscar: "  await esperarEnVuelo(misma);  // …y la vieja que ya salió llega antes que esta\n", poner: "" },
+  { nombre: "sw: borra los cachés de la app de pedidos", archivo: 'sw', prueba: "service-worker",
+    espera: "borra solo sus versiones viejas",
+    buscar: "claves.filter(k => k.startsWith(PREFIJO) && k !== CACHE)", poner: "claves.filter(k => k !== CACHE)" },
   { nombre: 'recorrido: cambiar la clave no invalida la vieja', prueba: 'recorrido',
     espera: 'la vieja deja de andar en el acto',
     buscar: `     set clave_equipo_hash = public.expo__hash_clave(clave)
    where estado <> 'cerrada';`, poner: `     set clave_equipo_hash = clave_equipo_hash
    where estado <> 'cerrada';` },
 ];
+
+const VERIFICACION = /do \$verificacion\$[\s\S]*?\$verificacion\$;/;
 
 const NODE_TEST = ['--test', '--test-force-exit', '--test-timeout=60000'];
 
@@ -332,18 +586,24 @@ const dir = mkdtempSync(join(tmpdir(), 'expo-mutacion-'));
 let sobrevivieron = 0, rotas = 0;
 
 for (const m of MUTACIONES.filter((x) => !filtro || x.nombre.includes(filtro))) {
-  const veces = ORIGINAL.split(m.buscar).length - 1;
+  const archivo = ARCHIVOS[m.archivo || 'sql'];
+  const veces = archivo.original.split(m.buscar).length - 1;
   if (veces !== 1) {
-    console.log(`?  ${m.nombre}: el texto aparece ${veces} veces en ${basename(ARCHIVO)} (tiene que ser 1)`);
+    console.log(`?  ${m.nombre}: el texto aparece ${veces} veces en ${basename(archivo.ruta)} (tiene que ser 1)`);
     rotas++;
     continue;
   }
-  const mutado = join(dir, 'mutado.sql');
+  const esSql = !m.archivo || m.archivo === 'sql';
+  const mutado = join(dir, 'mutado' + (esSql ? '.sql' : m.archivo === 'sw' ? '.js' : '.html'));
   // con una función: un texto de reemplazo con $$ (cierre de función SQL) se
   // volvería $ si se pasara como string
-  writeFileSync(mutado, ORIGINAL.replace(m.buscar, () => m.poner));
+  let texto = archivo.original.replace(m.buscar, () => m.poner);
+  // El bloque de VERIFICACIÓN del final frena la migración si algo quedó
+  // abierto: se saca para medir a los tests, salvo cuando lo mutado es él.
+  if (esSql && !m.verificacion) texto = texto.replace(VERIFICACION, '');
+  writeFileSync(mutado, texto);
 
-  const error = carga(mutado);
+  const error = esSql ? carga(mutado) : null;
   if (error) {
     console.log(`?  ${m.nombre}: el SQL mutado no carga (${error.trim()})`);
     rotas++;
@@ -351,7 +611,7 @@ for (const m of MUTACIONES.filter((x) => !filtro || x.nombre.includes(filtro))) 
   }
 
   const r = spawnSync(process.execPath, [...NODE_TEST, `test/${m.prueba}.test.mjs`],
-    { cwd: RAIZ, env: { ...process.env, EXPO_SQL: mutado }, encoding: 'utf8' });
+    { cwd: RAIZ, env: { ...process.env, [archivo.variable]: mutado }, encoding: 'utf8' });
   const fallaron = [...r.stdout.matchAll(/✖ (.+?) \(\d/g)].map((x) => x[1]);
   if (fallaron.some((t) => t.includes(m.espera))) {
     console.log(`✓  ${m.nombre}`);

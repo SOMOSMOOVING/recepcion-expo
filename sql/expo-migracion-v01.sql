@@ -976,6 +976,7 @@ begin
       from public.expo_visitas v
       join public.expo_invitados i on i.id = v.invitado_id
      where v.id = visita and i.edicion_id = e.id
+       and v.dia = public.expo_hoy()   -- con la lista de ayer guardada en el celular no se anota en una visita de ayer
   ) then
     raise exception 'expo_visita_invalida';
   end if;
@@ -1282,31 +1283,82 @@ notify pgrst, 'reload schema';
 
 -- ============================================================
 --  VERIFICACIÓN
+--  El SQL Editor de Supabase muestra solo el resultado de la ÚLTIMA consulta.
+--  Por eso los controles van en un bloque que FRENA la migración entera si
+--  algo quedó abierto (todo corre en una sola transacción: no queda nada a
+--  medias), y al final hay una sola fila con el resumen.
 -- ============================================================
+do $verificacion$
+declare
+  -- lo único que el anónimo puede ejecutar: las de la sección 7
+  publicas text[] := array[
+    'expo_alta_rapida', 'expo_anotarme', 'expo_bajarme', 'expo_buscar', 'expo_confirmar',
+    'expo_corregir_cantidad', 'expo_equipo_lista', 'expo_presentes', 'expo_registrar_visita',
+    'expo_tome_pedido', 'expo_ver_invitado'];
+  -- la única interna que puede ejecutar un logueado: la usa expo_hoy (sección 7)
+  internas_logueado text[] := array['expo__dia_ar'];
+  hay text;
+begin
+  select string_agg(c.relname, ', ') into hay
+    from pg_class c
+   where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'
+     and c.relname like 'expo\_%' and not c.relrowsecurity;
+  if hay is not null then
+    raise exception 'VERIFICACIÓN: tablas sin RLS: %', hay;
+  end if;
 
--- Todas las expo_* con RLS prendido (tiene que decir true en todas).
-select c.relname as tabla, c.relrowsecurity as rls
-  from pg_class c
- where c.relnamespace = 'public'::regnamespace
-   and c.relkind = 'r'
-   and c.relname like 'expo\_%'
- order by 1;
+  select string_agg(c.relname, ', ') into hay
+    from pg_class c
+   where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'
+     and c.relname like 'expo\_%'
+     and has_table_privilege('anon', c.oid, 'select, insert, update, delete, truncate, references, trigger');
+  if hay is not null then
+    raise exception 'VERIFICACIÓN: el anónimo puede tocar estas tablas: %', hay;
+  end if;
 
--- Lo único que el anónimo puede ejecutar: las del cliente, el cartel y el
--- equipo de recorrido de la sección 7. Ninguna que empiece con expo__.
-select p.proname as funcion_publica
-  from pg_proc p
- where p.pronamespace = 'public'::regnamespace
-   and p.proname like 'expo\_%'
-   and has_function_privilege('anon', p.oid, 'execute')
- order by 1;
+  select string_agg(c.relname, ', ') into hay
+    from pg_class c
+   where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'
+     and c.relname like 'expo\_%'
+     and has_table_privilege('authenticated', c.oid, 'truncate, references, trigger');
+  if hay is not null then
+    raise exception 'VERIFICACIÓN: un usuario logueado puede vaciar estas tablas: %', hay;
+  end if;
 
--- Ninguna tabla expo_* legible por el anónimo (tiene que dar 0 filas).
-select c.relname as tabla_expuesta
-  from pg_class c
- where c.relnamespace = 'public'::regnamespace
-   and c.relkind = 'r'
-   and c.relname like 'expo\_%'
-   and has_table_privilege('anon', c.oid, 'select');
+  select string_agg(p.proname, ', ') into hay
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and p.proname like 'expo\_%'
+     and has_function_privilege('anon', p.oid, 'execute')
+     and p.proname <> all (publicas);
+  if hay is not null then
+    raise exception 'VERIFICACIÓN: el anónimo puede ejecutar funciones que no son públicas: %', hay;
+  end if;
 
-select 'listo: expo v01 (tablas, RLS y funciones del cliente, cartel, recorrido y vincular)' as resultado;
+  select string_agg(f, ', ') into hay
+    from unnest(publicas) f
+   where not exists (select 1 from pg_proc p
+                      where p.pronamespace = 'public'::regnamespace and p.proname = f
+                        and has_function_privilege('anon', p.oid, 'execute'));
+  if hay is not null then
+    raise exception 'VERIFICACIÓN: al anónimo le faltan funciones (la app no andaría): %', hay;
+  end if;
+
+  select string_agg(p.proname, ', ') into hay
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and p.proname like 'expo\_\_%'
+     and has_function_privilege('authenticated', p.oid, 'execute')
+     and p.proname <> all (internas_logueado);
+  if hay is not null then
+    raise exception 'VERIFICACIÓN: un usuario logueado puede ejecutar funciones internas: %', hay;
+  end if;
+end
+$verificacion$;
+
+-- Lo único que muestra el SQL Editor. Si llegó hasta acá, pasó los controles.
+select 'listo: expo v01 verificada' as resultado,
+       (select count(*) from pg_class c
+         where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'
+           and c.relname like 'expo\_%' and c.relrowsecurity) as tablas_con_rls,
+       (select count(*) from pg_proc p
+         where p.pronamespace = 'public'::regnamespace and p.proname like 'expo\_%'
+           and has_function_privilege('anon', p.oid, 'execute')) as funciones_del_anonimo;

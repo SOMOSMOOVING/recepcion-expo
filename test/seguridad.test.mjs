@@ -1,7 +1,8 @@
 // La frontera es el RLS y los permisos, no la app.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { base, como, anon, admin, rpc, uno, ADMIN, VENDEDOR } from './db.mjs';
+import { base, como, anon, admin, rpc, uno, ADMIN, VENDEDOR, leerMigraciones, archivosMigracion } from './db.mjs';
+import { readFileSync } from 'node:fs';
 
 async function tablasExpo(db) {
   const r = await db.query(`
@@ -127,5 +128,32 @@ test('las claves del equipo y del cartel no se guardan: solo su hash', async () 
     const guardado = await uno(db, `select ${col} from expo_ediciones`);
     assert.notEqual(guardado, clave, col);
     assert.match(guardado, /^[0-9a-f]{64}$/, col);
+  }
+});
+
+// El bloque de VERIFICACIÓN del final de la migración: en el SQL Editor solo
+// se ve la última consulta, así que si algo quedó abierto tiene que FRENAR.
+// (La prueba de mutación lo saca del SQL mutado, salvo cuando lo muta a él:
+// entonces se usa el del archivo de verdad.)
+const BLOQUE = /do \$verificacion\$[\s\S]*?\$verificacion\$;/;
+const VERIFICACION = (leerMigraciones().at(-1).match(BLOQUE)
+  || readFileSync(archivosMigracion().at(-1), 'utf8').match(BLOQUE))[0];
+
+test('la verificación de la migración frena si algo quedó abierto', async () => {
+  const { db } = await base();
+  await db.exec(VERIFICACION);   // la migración tal cual pasa
+  const sabotajes = [
+    [`alter table public.expo_visitas disable row level security`, /sin RLS: expo_visitas/],
+    [`grant select on public.expo_invitados to anon`, /el anónimo puede tocar estas tablas: expo_invitados/],
+    [`grant insert on public.expo_visitas to anon`, /el anónimo puede tocar estas tablas: expo_visitas/],
+    [`grant truncate on public.expo_visitas to authenticated`, /logueado puede vaciar estas tablas: expo_visitas/],
+    [`grant execute on function public.expo_vincular(uuid, text) to anon`, /no son públicas: expo_vincular/],
+    [`revoke execute on function public.expo_buscar(text, text) from anon, authenticated`, /le faltan funciones .*: expo_buscar/],
+    [`grant execute on function public.expo__por_token(text) to authenticated`, /funciones internas: expo__por_token/],
+  ];
+  for (const [sabotaje, error] of sabotajes) {
+    const { db } = await base();
+    await db.exec(sabotaje);
+    await assert.rejects(db.exec(VERIFICACION), error, sabotaje);
   }
 });

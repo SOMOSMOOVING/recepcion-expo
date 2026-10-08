@@ -1,0 +1,1709 @@
+<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Expo Mooving · Registro</title>
+<meta name="theme-color" content="#f8f7fa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f0d13" media="(prefers-color-scheme: dark)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap">
+<style>
+/* ===== tokens.css ===== */
+:root, [data-theme="light"] {
+  --fondo: #f8f7fa;
+  --superficie: #ffffff;
+  --superficie-2: #f1eff5;
+  --linea: #e7e4ec;
+  --linea-fuerte: #8d879b;
+  --tinta: #17141d;
+  --tinta-2: #5c5767;
+  --violeta: #7b2ff7;
+  --violeta-presionado: #6420d6;
+  --sobre-violeta: #ffffff;
+  --violeta-texto: #5b1bd0;
+  --violeta-suave: #f2ecfe;
+  --ok: #157a52;
+  --ok-suave: #e8f4ee;
+  --aviso: #8a5a0b;
+  --aviso-suave: #fbf2e1;
+  --error: #b3261e;
+  --error-suave: #fcebe9;
+  --marca-amarillo: #dbdc00;
+  --marca-celeste: #00a8e2;
+  --acento-rosa: #ff3d7f;
+  --acento-naranja: #ff8a00;
+  --acento-verde: #22c55e;
+  --sombra-barra: 0 -1px 0 rgba(23, 20, 29, 0.06), 0 -12px 32px rgba(23, 20, 29, 0.05);
+  --sombra-hoja: 0 24px 64px rgba(23, 20, 29, 0.16);
+}
+[data-theme="dark"] {
+  --fondo: #0f0d13;
+  --superficie: #18161e;
+  --superficie-2: #221f2a;
+  --linea: #2c2935;
+  --linea-fuerte: #6f6a7c;
+  --tinta: #f2f0f5;
+  --tinta-2: #aaa4b5;
+  --violeta: #7b2ff7;
+  --violeta-presionado: #9461ff;
+  --sobre-violeta: #ffffff;
+  --violeta-texto: #b99bff;
+  --violeta-suave: #241b3d;
+  --ok: #5fcf9d;
+  --ok-suave: #10241b;
+  --aviso: #eab54f;
+  --aviso-suave: #2a2012;
+  --error: #f28b80;
+  --error-suave: #2e1715;
+  --marca-amarillo: #dbdc00;
+  --marca-celeste: #00a8e2;
+  --acento-rosa: #ff3d7f;
+  --acento-naranja: #ff8a00;
+  --acento-verde: #22c55e;
+  --sombra-barra: 0 -1px 0 rgba(255, 255, 255, 0.06), 0 -12px 32px rgba(0, 0, 0, 0.5);
+  --sombra-hoja: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+:root {
+  --esp-1: 4px;
+  --esp-2: 8px;
+  --esp-3: 12px;
+  --esp-4: 16px;
+  --esp-5: 20px;
+  --esp-6: 24px;
+  --esp-8: 32px;
+  --esp-12: 48px;
+  --radio-chico: 6px;
+  --radio: 12px;
+  --radio-grande: 18px;
+  --radio-pildora: 999px;
+  --toque-min: 48px;
+  --toque-cliente: 56px;
+  --toque-principal: 60px;
+  --logo: 26px;
+  --ancho-contenido: 480px;
+  --font-sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+}
+
+/* ===== components/bundle.css ===== */
+/* Mooving Recepción — componentes en HTML + CSS, sin librerías ni build.
+   Clases mr-. Colores, medidas y radios salen de tokens.css.
+   La última sección (mr-demo-*) es andamiaje de las vistas previas: no va a la app. */
+
+/* ───────── Base ───────── */
+.mr, .mr-pantalla { font-family: var(--font-sans); color: var(--tinta); font-size: 16px; line-height: 24px; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; font-feature-settings: "ss01" 0; }
+.mr *, .mr *::before, .mr *::after, .mr-pantalla *, .mr-pantalla *::before, .mr-pantalla *::after { box-sizing: border-box; }
+.mr-pantalla h1, .mr-pantalla h2, .mr-pantalla h3, .mr-pantalla p, .mr h1, .mr h2, .mr h3, .mr p { margin: 0; }
+.mr-oculto { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.mr-num { font-variant-numeric: tabular-nums; font-weight: 500; }
+:where(.mr, .mr-pantalla) :focus-visible { outline: 2px solid var(--violeta-texto); outline-offset: 3px; }
+
+/* ───────── Logo ───────── */
+.mr-logo { display: inline-flex; align-items: center; flex: none; }
+.mr-logo img { display: block; height: var(--logo); width: auto; }
+.mr-logo .mr-logo-oscuro { display: none; }
+[data-theme="dark"] .mr-logo .mr-logo-claro { display: none; }
+[data-theme="dark"] .mr-logo .mr-logo-oscuro { display: block; }
+.mr-logo--grande img { height: 36px; }
+
+/* ───────── Pantalla de celular ───────── */
+.mr-pantalla { container-type: inline-size; display: flex; flex-direction: column; min-height: 100dvh; width: 100%; max-width: var(--ancho-contenido); margin: 0 auto; background: var(--fondo); }
+.mr-pantalla--ancha { max-width: 1240px; }
+.mr-cabecera { display: flex; align-items: center; justify-content: space-between; gap: var(--esp-3); min-height: 60px; padding: var(--esp-3) var(--esp-4) var(--esp-2); font-size: 13px; line-height: 18px; color: var(--tinta-2); }
+.mr-cabecera-dato { text-align: right; }
+.mr-cabecera-dato > span:first-child { color: var(--tinta); font-weight: 600; }
+.mr-cuerpo { flex: 1; padding: var(--esp-2) var(--esp-4) var(--esp-6); display: flex; flex-direction: column; gap: var(--esp-6); }
+.mr-barra { position: sticky; bottom: 0; flex: none; padding: var(--esp-3) var(--esp-4) calc(var(--esp-4) + env(safe-area-inset-bottom)); background: var(--superficie); box-shadow: var(--sombra-barra); display: flex; flex-direction: column; gap: var(--esp-2); }
+.mr-barra-nota { font-size: 14px; line-height: 20px; color: var(--tinta-2); text-align: center; }
+.mr-display { font-family: var(--font-serif); font-size: 36px; line-height: 40px; font-weight: 400; letter-spacing: -0.01em; }
+.mr-titulo { font-family: var(--font-serif); font-size: 30px; line-height: 34px; font-weight: 400; letter-spacing: -0.01em; }
+.mr-subtitulo { font-size: 17px; line-height: 24px; font-weight: 600; }
+.mr-texto { font-size: 16px; line-height: 24px; }
+.mr-chico { font-size: 14px; line-height: 20px; color: var(--tinta-2); }
+.mr-etiqueta { font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-2); }
+.mr-filete { height: 1px; border: 0; margin: 0; background: var(--linea); }
+
+/* ───────── RazonSocial ───────── */
+.mr-razon { font-size: 28px; line-height: 33px; font-weight: 600; letter-spacing: .005em; overflow-wrap: anywhere; hyphens: none; text-wrap: balance; color: var(--tinta); }
+.mr-razon > span { display: block; }
+.mr-razon--larga { font-size: 24px; line-height: 29px; }
+.mr-razon-datos { margin-top: var(--esp-3); font-size: 14px; line-height: 20px; color: var(--tinta-2); }
+.mr-encontrado { color: inherit; background: var(--violeta-suave); border-radius: 3px; padding: 0 1px; box-shadow: inset 0 -1px 0 var(--violeta-texto); }
+
+/* ───────── Boton ───────── */
+.mr-boton { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: var(--esp-2); min-height: var(--toque-min); padding: 0 var(--esp-5); border: 1px solid transparent; border-radius: var(--radio); font: 600 15px/20px var(--font-sans); letter-spacing: .005em; text-decoration: none; cursor: pointer; white-space: nowrap; user-select: none; touch-action: manipulation; transition: background-color .15s ease; }
+.mr-boton--principal { width: 100%; min-height: var(--toque-principal); font-size: 18px; line-height: 24px; background: var(--violeta); color: var(--sobre-violeta); white-space: normal; text-align: center; }
+.mr-boton--principal:active { background: var(--violeta-presionado); }
+.mr-boton--principal[aria-busy="true"] { opacity: .8; cursor: progress; }
+.mr-boton--secundario { background: var(--superficie); color: var(--tinta); border-color: var(--linea-fuerte); }
+.mr-boton--secundario:active { background: var(--superficie-2); }
+.mr-boton--anotarme { background: var(--tinta); color: var(--fondo); }
+.mr-boton--anotarme:active { opacity: .85; }
+.mr-boton--texto { min-height: var(--toque-min); padding: 0 var(--esp-2); background: none; color: var(--violeta-texto); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.mr-boton--ancho { width: 100%; }
+.mr-boton--chico { min-height: 40px; padding: 0 14px; font-size: 14px; }
+.mr-boton[disabled] { opacity: .45; cursor: not-allowed; }
+.mr-boton svg { width: 18px; height: 18px; flex: none; }
+.mr-girando { width: 18px; height: 18px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: mr-gira .9s linear infinite; }
+@keyframes mr-gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .mr-girando { animation: none; border-right-color: currentColor; opacity: .6; } .mr-boton { transition: none; } }
+
+/* ───────── ContadorPersonas ───────── */
+.mr-contador { border: 0; margin: 0; padding: 0; min-width: 0; }
+.mr-contador-pregunta { padding: 0; margin-bottom: var(--esp-3); font-size: 17px; line-height: 24px; font-weight: 600; color: var(--tinta); }
+.mr-contador-opciones { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--esp-2); }
+.mr-contador-opciones label { position: relative; display: block; }
+.mr-contador-opciones input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.mr-contador-opciones span { display: flex; align-items: center; justify-content: center; height: var(--toque-cliente); border-radius: var(--radio); border: 1px solid var(--linea); background: var(--superficie); font-size: 24px; line-height: 28px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--tinta); transition: background-color .15s ease; }
+.mr-contador-opciones input:checked + span { background: var(--violeta); border-color: var(--violeta); color: var(--sobre-violeta); font-weight: 600; }
+.mr-contador-opciones input:focus-visible + span { outline: 2px solid var(--violeta-texto); outline-offset: 3px; }
+.mr-contador-opciones .mr-contador-mas-op span { font-size: 20px; }
+.mr-contador-mas { display: flex; align-items: center; justify-content: space-between; gap: var(--esp-3); margin-top: var(--esp-3); padding: 6px; border-radius: var(--radio); background: var(--superficie-2); }
+.mr-contador-mas[hidden] { display: none; }
+.mr-contador-mas output { text-align: center; font-size: 24px; line-height: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mr-contador-mas small { display: block; font-size: 13px; line-height: 16px; font-weight: 400; color: var(--tinta-2); }
+.mr-contador-mas .mr-boton { width: 52px; min-height: 52px; padding: 0; font-size: 24px; font-weight: 400; }
+
+/* ───────── Aviso y estados ───────── */
+.mr-aviso { display: flex; gap: var(--esp-3); align-items: flex-start; padding: 14px var(--esp-4); border-radius: var(--radio); background: var(--superficie-2); color: var(--tinta); font-size: 15px; line-height: 21px; }
+.mr-aviso svg { width: 20px; height: 20px; flex: none; margin-top: 1px; }
+.mr-aviso b { display: block; font-weight: 600; }
+.mr-aviso p, .mr-aviso .mr-chico { color: var(--tinta); }
+.mr-aviso--ok { background: var(--ok-suave); } .mr-aviso--ok svg { color: var(--ok); }
+.mr-aviso--atencion { background: var(--aviso-suave); } .mr-aviso--atencion svg { color: var(--aviso); }
+.mr-aviso--error { background: var(--error-suave); } .mr-aviso--error svg { color: var(--error); }
+.mr-aviso--fino { padding: 10px var(--esp-3); font-size: 14px; line-height: 20px; }
+.mr-aviso--fino svg { width: 18px; height: 18px; }
+.mr-aviso-accion { margin-left: auto; align-self: center; }
+
+.mr-estado { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--esp-3); padding: var(--esp-12) var(--esp-4); }
+.mr-estado-icono { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--superficie-2); color: var(--tinta-2); margin-bottom: var(--esp-1); }
+.mr-estado-icono svg { width: 26px; height: 26px; }
+.mr-estado--ok .mr-estado-icono { background: var(--ok-suave); color: var(--ok); }
+.mr-estado--error .mr-estado-icono { background: var(--error-suave); color: var(--error); }
+.mr-estado--atencion .mr-estado-icono { background: var(--aviso-suave); color: var(--aviso); }
+.mr-estado .mr-chico { max-width: 34ch; }
+
+/* ───────── Insignias y Categoria ───────── */
+.mr-insignia { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: var(--radio-chico); background: var(--superficie-2); font-size: 12px; line-height: 18px; font-weight: 600; letter-spacing: .01em; color: var(--tinta); white-space: nowrap; vertical-align: middle; }
+.mr-insignia--ok { background: var(--ok-suave); color: var(--ok); }
+.mr-insignia--atencion { background: var(--aviso-suave); color: var(--aviso); }
+.mr-insignia--error { background: var(--error-suave); color: var(--error); }
+.mr-insignia--violeta { background: var(--violeta-suave); color: var(--violeta-texto); }
+.mr-categoria { background: transparent; border: 1px solid var(--linea); }
+.mr-categoria::before { content: ""; width: 7px; height: 7px; border-radius: var(--radio-pildora); background: var(--tinta-2); flex: none; }
+.mr-categoria--comex::before { background: var(--marca-celeste); }
+.mr-categoria--proveedor::before { background: var(--acento-naranja); }
+.mr-categoria--licencia::before { background: var(--acento-verde); }
+.mr-categoria--cliente-de-cliente::before { background: var(--acento-rosa); }
+.mr-categoria--sin-codigo { background: var(--aviso-suave); border-color: transparent; color: var(--aviso); }
+.mr-categoria--sin-codigo::before { background: var(--aviso); }
+
+/* ───────── Campos ───────── */
+.mr-campo { display: flex; flex-direction: column; gap: 6px; }
+.mr-campo > span { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--tinta); }
+.mr-campo > span small { font-size: 13px; font-weight: 400; color: var(--tinta-2); }
+.mr-entrada { width: 100%; min-height: var(--toque-cliente); padding: 0 var(--esp-4); border: 1px solid var(--linea-fuerte); border-radius: var(--radio); background: var(--superficie); color: var(--tinta); font: 400 16px/24px var(--font-sans); }
+.mr-entrada::placeholder { color: var(--tinta-2); }
+.mr-entrada[aria-invalid="true"] { border-color: var(--error); }
+.mr-buscador { position: relative; display: block; }
+.mr-buscador svg { position: absolute; left: 16px; top: 50%; width: 20px; height: 20px; transform: translateY(-50%); color: var(--tinta-2); pointer-events: none; }
+.mr-buscador .mr-entrada { padding-left: 46px; padding-right: 52px; font-size: 17px; }
+.mr-buscador-limpiar { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: var(--toque-min); height: var(--toque-min); border: 0; background: none; color: var(--tinta-2); font-size: 22px; font-weight: 300; cursor: pointer; border-radius: var(--radio); }
+.mr-select { appearance: none; min-height: 40px; padding: 0 34px 0 12px; border: 1px solid var(--linea-fuerte); border-radius: var(--radio-chico); background: var(--superficie) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23888396' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E") no-repeat right 10px center / 16px; color: var(--tinta); font: 400 14px/20px var(--font-sans); }
+.mr-opciones-categoria { display: flex; flex-direction: column; border: 1px solid var(--linea); border-radius: var(--radio); background: var(--superficie); overflow: hidden; }
+.mr-opciones-categoria label { position: relative; display: flex; align-items: center; gap: var(--esp-3); min-height: 52px; padding: 0 var(--esp-4); font-size: 16px; line-height: 20px; cursor: pointer; }
+.mr-opciones-categoria label + label { border-top: 1px solid var(--linea); }
+.mr-opciones-categoria input { width: 20px; height: 20px; margin: 0; accent-color: var(--violeta); flex: none; }
+.mr-opciones-categoria label:has(input:checked) { background: var(--violeta-suave); font-weight: 600; }
+
+/* ───────── Chips y pestañas ───────── */
+.mr-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 calc(var(--esp-4) * -1); padding: 2px var(--esp-4); }
+.mr-chip { flex: none; min-height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--linea); border-radius: var(--radio-pildora); background: var(--superficie); color: var(--tinta); font: 500 14px/20px var(--font-sans); cursor: pointer; }
+.mr-chip[aria-pressed="true"] { background: var(--tinta); border-color: var(--tinta); color: var(--fondo); }
+.mr-chip .mr-num { font-weight: 400; opacity: .75; }
+.mr-pestanas { display: flex; gap: var(--esp-4); border-bottom: 1px solid var(--linea); overflow-x: auto; }
+.mr-pestana { appearance: none; background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; min-height: var(--toque-min); padding: 0 2px; font: 500 15px/20px var(--font-sans); color: var(--tinta-2); cursor: pointer; white-space: nowrap; }
+.mr-pestana[aria-selected="true"] { color: var(--tinta); font-weight: 600; border-bottom-color: var(--tinta); }
+.mr-pestana .mr-num { margin-left: 6px; font-weight: 400; color: var(--tinta-2); }
+
+/* ───────── Listas ───────── */
+.mr-lista { list-style: none; margin: 0; padding: 0; background: var(--superficie); border-radius: var(--radio-grande); border: 1px solid var(--linea); overflow: hidden; }
+.mr-lista > li + li { border-top: 1px solid var(--linea); }
+.mr-resultado { display: flex; align-items: center; gap: var(--esp-3); width: 100%; min-height: 72px; padding: var(--esp-3) var(--esp-4); background: none; border: 0; text-align: left; color: var(--tinta); font: inherit; cursor: pointer; }
+.mr-resultado:active { background: var(--superficie-2); }
+.mr-resultado-texto { flex: 1; min-width: 0; }
+.mr-resultado-razon { font-size: 16px; line-height: 22px; font-weight: 600; overflow-wrap: anywhere; }
+.mr-resultado-flecha { flex: none; width: 18px; height: 18px; color: var(--tinta-2); }
+.mr-grupo-titulo { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px var(--esp-3); margin: 0 0 var(--esp-3); }
+
+/* ───────── FilaPresente ───────── */
+.mr-presente { padding: var(--esp-4) var(--esp-4) var(--esp-4); background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio-grande); display: flex; flex-direction: column; gap: 6px; }
+.mr-presente-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13px; line-height: 18px; color: var(--tinta-2); }
+.mr-presente-meta b { color: var(--tinta); font-weight: 600; font-variant-numeric: tabular-nums; }
+.mr-presente-razon { font-size: 16px; line-height: 22px; font-weight: 600; overflow-wrap: anywhere; }
+.mr-presente-pie { display: flex; align-items: center; justify-content: space-between; gap: var(--esp-3); margin-top: 6px; padding-top: var(--esp-3); border-top: 1px solid var(--linea); }
+.mr-atiende { font-size: 14px; line-height: 20px; color: var(--tinta-2); min-width: 0; }
+.mr-atiende b { color: var(--tinta); font-weight: 600; }
+.mr-atiende--recorrido::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: var(--violeta); vertical-align: 1px; }
+.mr-presente-pie .mr-boton { flex: none; min-width: 108px; min-height: 44px; }
+.mr-presente--mio { border-color: var(--violeta-texto); box-shadow: inset 0 0 0 1px var(--violeta-texto); }
+
+.mr-tostada { display: flex; align-items: center; gap: var(--esp-3); padding: 6px 6px 6px var(--esp-4); border-radius: var(--radio); background: var(--tinta); color: var(--fondo); font-size: 14px; line-height: 20px; }
+.mr-tostada .mr-boton--texto { color: var(--fondo); margin-left: auto; }
+
+/* ───────── Recepción ───────── */
+.mr-cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio-grande); overflow: hidden; }
+.mr-cifra { padding: var(--esp-4) var(--esp-5); box-shadow: -1px 0 0 var(--linea); }
+.mr-cifra-valor { display: block; font-family: var(--font-serif); font-size: 44px; line-height: 46px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.mr-cifra-valor small { font-family: var(--font-sans); font-size: 15px; font-weight: 500; color: var(--tinta-2); margin-left: 2px; }
+.mr-cifra-pie { display: block; margin-top: 4px; font-size: 13px; line-height: 18px; color: var(--tinta-2); }
+.mr-cifra--clave .mr-cifra-valor { color: var(--aviso); }
+.mr-cifra--clave { background: var(--aviso-suave); }
+.mr-cifras--2 { grid-template-columns: 1fr 1fr; }
+.mr-cifras--2 .mr-cifra--ancha { grid-column: 1 / -1; box-shadow: 0 -1px 0 var(--linea); }
+
+.mr-falta { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px var(--esp-4); padding: 14px var(--esp-4); }
+.mr-falta-razon { font-size: 15px; line-height: 21px; font-weight: 600; overflow-wrap: anywhere; }
+.mr-falta-datos { grid-column: 1; font-size: 13px; line-height: 18px; color: var(--tinta-2); }
+.mr-falta-lado { grid-column: 2; grid-row: 1 / span 2; align-self: center; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.mr-cuenta { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 14px; }
+@container (max-width: 520px) {
+  .mr-falta { grid-template-columns: minmax(0, 1fr); }
+  .mr-falta-lado { grid-column: 1; grid-row: auto; flex-direction: row; align-items: center; gap: var(--esp-2); text-align: left; margin-top: 6px; }
+}
+
+/* Hoja (Vincular alta) */
+.mr-hoja { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio-grande); box-shadow: var(--sombra-hoja); padding: var(--esp-6); display: flex; flex-direction: column; gap: var(--esp-5); }
+.mr-hoja-cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--esp-3); }
+.mr-hoja-cerrar { width: 40px; height: 40px; border: 0; border-radius: var(--radio); background: var(--superficie-2); color: var(--tinta-2); font-size: 20px; cursor: pointer; }
+.mr-ficha { display: grid; grid-template-columns: auto 1fr; gap: 6px var(--esp-4); padding: var(--esp-4); border-radius: var(--radio); background: var(--superficie-2); font-size: 14px; line-height: 20px; }
+.mr-ficha dt { color: var(--tinta-2); }
+.mr-ficha dd { margin: 0; color: var(--tinta); font-weight: 500; }
+.mr-opciones-vinculo { display: flex; flex-direction: column; border: 1px solid var(--linea); border-radius: var(--radio); overflow: hidden; }
+.mr-opciones-vinculo label { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 4px var(--esp-3); align-items: start; padding: 14px var(--esp-4); cursor: pointer; }
+.mr-opciones-vinculo label + label { border-top: 1px solid var(--linea); }
+.mr-opciones-vinculo input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--violeta); }
+.mr-opciones-vinculo label:has(input:checked) { background: var(--violeta-suave); }
+.mr-opciones-vinculo .mr-sub { grid-column: 2 / -1; font-size: 13px; line-height: 18px; color: var(--tinta-2); }
+.mr-hoja-pie { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2) var(--esp-3); padding-top: var(--esp-4); border-top: 1px solid var(--linea); }
+
+/* ───────── Tabla de trabajo ───────── */
+.mr-barra-herr { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); }
+.mr-barra-herr .mr-buscador { flex: 1 1 220px; max-width: 300px; }
+.mr-barra-herr .mr-buscador .mr-entrada { min-height: 40px; font-size: 14px; padding-left: 38px; border-radius: var(--radio-chico); }
+.mr-barra-herr .mr-buscador svg { left: 12px; width: 16px; height: 16px; }
+.mr-interruptor { display: inline-flex; align-items: center; gap: var(--esp-2); min-height: 40px; font-size: 14px; line-height: 20px; color: var(--tinta); cursor: pointer; }
+.mr-interruptor input { width: 18px; height: 18px; margin: 0; accent-color: var(--violeta); }
+.mr-empuja { margin-left: auto; }
+.mr-seleccion { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2) var(--esp-3); padding: 6px 6px 6px var(--esp-4); border-radius: var(--radio); background: var(--tinta); color: var(--fondo); font-size: 14px; line-height: 20px; }
+.mr-seleccion .mr-boton { min-height: 36px; padding: 0 12px; font-size: 14px; }
+.mr-seleccion .mr-boton--secundario { background: transparent; color: var(--fondo); border-color: color-mix(in srgb, var(--fondo) 40%, transparent); }
+.mr-seleccion .mr-boton--texto { color: var(--fondo); }
+.mr-tabla-marco { overflow-x: auto; background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio-grande); }
+.mr-tabla { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; line-height: 20px; color: var(--tinta); }
+.mr-tabla th { position: sticky; top: 0; z-index: 1; padding: 14px var(--esp-3) 10px; background: var(--superficie); text-align: left; vertical-align: bottom; font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-2); white-space: nowrap; border-bottom: 1px solid var(--linea); }
+.mr-tabla th button { all: unset; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }
+.mr-tabla th[aria-sort] { color: var(--tinta); }
+.mr-tabla th[aria-sort="descending"] button::after { content: "↓"; }
+.mr-tabla th[aria-sort="ascending"] button::after { content: "↑"; }
+.mr-tabla td { padding: 14px var(--esp-3); border-bottom: 1px solid var(--linea); vertical-align: top; }
+.mr-tabla tr > :first-child { padding-left: var(--esp-5); }
+.mr-tabla tr > :last-child { padding-right: var(--esp-5); }
+.mr-tabla tbody tr:last-child td { border-bottom: 0; }
+.mr-tabla tbody tr:hover td { background: var(--fondo); }
+.mr-tabla tbody tr[aria-selected="true"] td { background: var(--violeta-suave); }
+.mr-tabla .mr-der { text-align: right; white-space: nowrap; }
+.mr-tabla .mr-nowrap { white-space: nowrap; }
+.mr-tabla .mr-num { color: var(--tinta-2); }
+.mr-tabla .mr-col-check { width: 48px; padding-right: 0; }
+.mr-tabla input[type="checkbox"] { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--violeta); }
+.mr-tabla .mr-col-razon { min-width: 280px; }
+.mr-tabla .mr-razon-celda { font-weight: 600; overflow-wrap: anywhere; }
+.mr-tabla .mr-sub { display: block; margin-top: 2px; font-size: 13px; line-height: 18px; color: var(--tinta-2); font-weight: 400; }
+.mr-tabla .mr-sin-dato { color: var(--tinta-2); }
+.mr-pie-tabla { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--esp-2); font-size: 13px; line-height: 18px; color: var(--tinta-2); }
+
+@container (max-width: 719px) {
+  .mr-tabla--tarjetas thead { display: none; }
+  .mr-tabla--tarjetas, .mr-tabla--tarjetas tbody, .mr-tabla--tarjetas tr, .mr-tabla--tarjetas td { display: block; width: 100%; }
+  .mr-tabla--tarjetas tr { position: relative; padding: var(--esp-4) var(--esp-4) var(--esp-4) 52px; border-bottom: 1px solid var(--linea); }
+  .mr-tabla--tarjetas tr > :first-child, .mr-tabla--tarjetas tr > :last-child { padding-left: 0; padding-right: 0; }
+  .mr-tabla--tarjetas td { padding: 1px 0; border: 0; text-align: left !important; }
+  .mr-tabla--tarjetas td[data-titulo] { font-size: 13px; color: var(--tinta-2); }
+  .mr-tabla--tarjetas td[data-titulo]::before { content: attr(data-titulo) " · "; }
+  .mr-tabla--tarjetas td[data-titulo] .mr-num { color: var(--tinta-2); }
+  .mr-tabla--tarjetas .mr-col-razon { margin-bottom: 4px; }
+  .mr-tabla--tarjetas tbody tr[aria-selected="true"] { background: var(--violeta-suave); }
+  .mr-tabla--tarjetas tbody tr td, .mr-tabla--tarjetas tbody tr:hover td, .mr-tabla--tarjetas tbody tr[aria-selected="true"] td { background: transparent; }
+  .mr-tabla--tarjetas .mr-col-check { position: absolute; left: var(--esp-4); top: var(--esp-4); width: auto; }
+}
+
+/* ───────── Cartel impreso (siempre papel claro) ───────── */
+.mr-cartel { width: 100%; aspect-ratio: 1 / 1.414; display: flex; flex-direction: column; background: #ffffff; color: #17141d; border-radius: 2px; overflow: hidden; font-family: var(--font-sans); }
+.mr-cartel-cuerpo { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 10px; text-align: center; padding: 8% 9% 6%; }
+.mr-cartel-marca img { height: 34px; width: auto; display: block; }
+.mr-cartel-titulo { font-family: var(--font-serif); font-size: 42px; line-height: 42px; font-weight: 400; letter-spacing: -0.015em; }
+.mr-cartel-qr { width: 42%; aspect-ratio: 1; padding: 4%; border: 1.5px solid #17141d; border-radius: 14px; background: #fff; }
+.mr-cartel-qr svg { display: block; width: 100%; height: 100%; }
+.mr-cartel-pasos { font-size: 16px; line-height: 24px; color: #17141d; }
+.mr-cartel-pie { font-size: 12px; line-height: 16px; letter-spacing: .08em; text-transform: uppercase; color: #5c5767; }
+
+/* ===== propio de la app (no está en el diseño) ===== */
+html, body { margin: 0; background: var(--fondo); }
+.mr-pantalla--cargando { justify-content: center; align-items: center; }
+/* al cambiar de pantalla el foco va al título (para el lector de pantalla): sin recuadro */
+#app [tabindex="-1"]:focus { outline: none; }
+/* el buscador ya tiene su × (mr-buscador-limpiar): sin la del navegador */
+.mr-buscador input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+</style>
+</head>
+<body>
+<div id="app" class="mr"></div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   Recepción Expo Mooving — un solo archivo, sin build ni librerías.
+   Pantallas: 1 · check-in del cliente (#t=TOKEN)  ·  2 · cartel (#cartel=CLAVE)
+              3 · equipo de recorrido (#equipo=CLAVE)
+   El diseño (clases mr-, textos) está en diseno/mooving-recepcion.html.
+
+   Reglas que no se negocian:
+   · Todo texto que venga de la base pasa por escH() antes de ir a innerHTML.
+   · Nunca se acepta un #access_token (ni ningún token de sesión) en la URL.
+   · El anónimo solo llama funciones RPC; los permisos los decide la base.
+   · Sin señal nadie queda frenado en la puerta: se guarda en el celular y
+     se reintenta solo.
+   ========================================================================== */
+
+const APP_VERSION = "v1";
+const SB_URL = "https://qjnvkfumrjytfhqlxuga.supabase.co";
+const SB_KEY = "sb_publishable_5HSe7XqWzr-DpEIh1FP37A_Xzo0aMfk";
+
+/* El logo. Para pasar al GIF animado (Mooving-02-alpha.gif), cambiar acá:
+   si es uno solo para los dos modos, poner el mismo archivo en ambos.
+   sw.js lo guarda para usar sin señal (SHELL): un test controla que coincidan. */
+const LOGO = { claro: "assets/logo-claro.png", oscuro: "assets/logo-oscuro.png" };
+
+const TZ = "America/Argentina/Buenos_Aires";
+const MAX_PERSONAS = 30;            // el "6+" del contador sube hasta acá (igual que la base)
+const OPCIONES_RAPIDAS = 5;         // 1 a 5 con un toque; el botón siguiente es "6+"
+const PERSONAS_POR_DEFECTO = 2;     // el caso típico: con un toque alcanza
+const MIN_LETRAS_BUSQUEDA = 3;      // igual que expo_buscar
+const MIN_LARGO_NOMBRE = 2;         // igual que expo_alta_rapida
+const ESPERA_RED_MS = 8000;         // más que esto sin respuesta = sin señal
+const REINTENTO_MIN_MS = 5000;      // la cola sin señal reintenta cada vez más espaciado…
+const REINTENTO_MAX_MS = 30000;     // …hasta este tope
+const DEMORA_BUSQUEDA_MS = 250;     // espera a que termine de escribir antes de buscar
+const REFRESCO_PRESENTES_MS = 15000; // la lista del equipo de recorrido se actualiza sola
+const TOSTADA_MS = 6000;            // cuánto queda "Te anotaste con… Deshacer"
+const TOKEN_RE = /^[0-9a-f]{32}$/;  // tokens del QR y claves de los links
+
+/* ====== utilidades ====== */
+const $ = s => document.querySelector(s);
+
+/* escapa texto para insertar en HTML: una razón social con < > & " ' no
+   rompe la pantalla ni ejecuta nada */
+function escH(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+/* Si el celular no deja guardar (almacenamiento lleno, o bloqueado en el
+   navegador del lector de QR), lo que no se pudo guardar queda en memoria
+   mientras la página siga abierta: la cola sin señal y las claves de los
+   links siguen andando. guardarLocal dice si quedó guardado de verdad. */
+const enMemoria = new Map();   // clave → JSON que no se pudo guardar
+function leerLocal(clave) {
+  try { return JSON.parse(enMemoria.has(clave) ? enMemoria.get(clave) : localStorage.getItem(clave)); } catch (e) { return null; }
+}
+function guardarLocal(clave, valor) {
+  const json = JSON.stringify(valor);
+  try { localStorage.setItem(clave, json); enMemoria.delete(clave); return true; } catch (e) { enMemoria.set(clave, json); return false; }
+}
+function borrarLocal(clave) {
+  try { localStorage.removeItem(clave); enMemoria.delete(clave); } catch (e) { enMemoria.set(clave, "null"); }
+}
+
+/* Las claves de los links (cartel, equipo): se guardan en el celular y salen
+   de la URL, así no quedan en capturas ni en el historial. Si no se pudieron
+   guardar, quedan en la URL: recargar la página no las pierde. Lo que
+   esperaba una clave nueva en la cola sale ahora. */
+const leerClave = nombre => { const c = leerLocal(nombre); return TOKEN_RE.test(c || "") ? c : null; };
+function claveDelLink(valor, nombre, destino) {
+  if (!TOKEN_RE.test(valor) || guardarLocal(nombre, valor)) history.replaceState(null, "", location.pathname + location.search + destino);
+  procesarCola();
+}
+
+const personas = n => n === 1 ? "1 persona" : n + " personas";
+const cuantos = n => n === 1 ? "vengo solo" : "somos " + n;
+
+/* ====== tema: claro u oscuro según el celular ====== */
+const mqOscuro = window.matchMedia("(prefers-color-scheme: dark)");
+function aplicarTema() { document.documentElement.dataset.theme = mqOscuro.matches ? "dark" : "light"; }
+aplicarTema();
+mqOscuro.addEventListener("change", aplicarTema);
+document.documentElement.dataset.version = APP_VERSION;
+
+/* ====== fechas (las de la base vienen como "2026-10-15") ====== */
+function fechaDe(iso) {
+  const [a, m, d] = String(iso).slice(0, 10).split("-").map(Number);
+  return new Date(Date.UTC(a, m - 1, d, 12));   // al mediodía UTC: ninguna zona la corre de día
+}
+const fmtDiaSemana = new Intl.DateTimeFormat("es-AR", { weekday: "long", timeZone: "UTC" });
+const fmtHora = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: TZ });
+const fmtHoyAR = new Intl.DateTimeFormat("en-CA", { timeZone: TZ });
+const capital = s => s.charAt(0).toUpperCase() + s.slice(1);
+const diaLargo = iso => fmtDiaSemana.format(fechaDe(iso)) + " " + fechaDe(iso).getUTCDate();   // "miércoles 15"
+const hora = ts => fmtHora.format(new Date(ts));                                              // "10:42"
+const hoyAR = () => fmtHoyAR.format(new Date());   // del celular: para el cartel y para lo guardado sin señal
+const diasEntre = (a, b) => Math.round((fechaDe(b) - fechaDe(a)) / 86400000);
+function horaCorta(t) {             // "10:00:00" → "10", "10:30:00" → "10:30"
+  const [h, m] = String(t).split(":");
+  return Number(h) + (m && m !== "00" ? ":" + m : "");
+}
+const horario = t => `${horaCorta(t.desde)} a ${horaCorta(t.hasta)} h`;                      // "10 a 11 h"
+const apertura = t => { const [h, m] = String(t).split(":"); return Number(h) + ":" + (m || "00"); }; // "9:00"
+
+/* ====== red: funciones RPC de Supabase ======
+   ErrorRed: no hubo respuesta (sin señal, tiempo agotado, servidor caído), la
+   base dijo "ahora no, probá en un rato", o hay un problema de configuración
+   (404, 401, 403) → se reintenta.
+   ErrorServidor: la base contestó que no (expo_...) → reintentar no lo arregla. */
+class ErrorRed extends Error {}
+class ErrorServidor extends Error {}
+const PASAJEROS = new Set(["expo_demasiadas_altas_minuto"]);
+
+async function rpc(fn, args) {
+  const ctrl = new AbortController();
+  const tope = setTimeout(() => ctrl.abort(), ESPERA_RED_MS);
+  let r;
+  try {
+    r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+      method: "POST",
+      headers: { apikey: SB_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(args),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    throw new ErrorRed("sin_red");
+  } finally {
+    clearTimeout(tope);
+  }
+  if (r.status >= 500 || r.status === 408 || r.status === 429) throw new ErrorRed("servidor_" + r.status);
+  let datos = null;
+  try { datos = await r.json(); } catch (e) { /* respuesta vacía */ }
+  if (!r.ok) {
+    const motivo = (datos && datos.message) || "error_" + r.status;
+    // solo es un "no" definitivo lo que la base rechazó a propósito (expo_...).
+    // Un 404/401/403 (la función no está, la clave cambió, falta un permiso) es
+    // un problema de configuración que se arregla: lo guardado no se tira.
+    const aProposito = motivo.startsWith("expo_") && !PASAJEROS.has(motivo);
+    throw aProposito ? new ErrorServidor(motivo) : new ErrorRed(motivo);
+  }
+  return datos;
+}
+
+const MENSAJES = {
+  expo_no_es_dia_de_expo: "Hoy no se puede registrar: la expo no está abierta.",
+  expo_no_es_previa: "La confirmación ya cerró: la expo empezó.",
+  expo_sin_visita_hoy: "Todavía no hay un registro de hoy para corregir.",
+  expo_cantidad_invalida: `La cantidad tiene que ser de 1 a ${MAX_PERSONAS}.`,
+  expo_token_invalido: "No reconocemos este QR.",
+  expo_nombre_invalido: "Escribí tu nombre.",
+  expo_empresa_invalida: "Escribí el nombre de la empresa o el comercio.",
+  expo_cuit_invalido: "El CUIT o código tiene caracteres que no van.",
+  expo_categoria_invalida: "Elegí cómo venís a la expo.",
+  expo_demasiadas_altas_minuto: "Hay muchos registros en este momento. Probá de nuevo en un minuto.",
+  expo_demasiadas_altas_dia: "Se llegó al máximo de registros de hoy. Pedí ayuda en la entrada.",
+  expo_visita_invalida: "Esa visita ya no está en la lista de hoy.",
+  expo_no_anotado: "Para marcar el pedido, primero anotate con ese presente.",
+  expo_equipo_invalido: "No figurás en el equipo activo. Pedile a recepción que te agregue.",
+  expo_clave_cartel_invalida: "Este QR ya no sirve: escaneá el del cartel de la entrada.",
+};
+const mensajeDe = e => MENSAJES[e && e.message] || "Algo salió mal. Pedí ayuda en la entrada.";
+
+/* ====== pantallas: qué hay pintado ahora ======
+   vistaN cambia con cada pantalla nueva. Lo que llega tarde (un envío de la
+   cola, una respuesta lenta) solo repinta si sigue la pantalla que lo esperaba:
+   así nunca aparece el "Bienvenidos" de un cliente encima de otro. */
+let vistaN = 0;
+
+function pintar(html) {
+  $("#app").innerHTML = html;
+  window.scrollTo(0, 0);
+  // el lector de pantalla arranca por el título de la pantalla nueva
+  const titulo = $("#app h1, #app h2");
+  if (titulo) { titulo.setAttribute("tabindex", "-1"); titulo.focus({ preventScroll: true }); }
+  return ++vistaN;
+}
+const cargando = () => pintar(`<main class="mr-pantalla mr-pantalla--cargando"><span class="mr-girando" role="status" aria-label="Cargando"></span></main>`);
+
+/* ====== cola sin señal ======
+   Lo que no se pudo enviar queda en el celular y se reintenta solo (cada vez
+   más espaciado, y en cuanto vuelve la conexión). Sobrevive a cerrar la
+   página. Un reintento nunca duplica: la base devuelve lo que ya había. */
+const COLA = "expoCola";
+const RECHAZADOS = "expoRechazados";   // lo que la base no aceptó nunca: queda para revisar
+const leerCola = () => leerLocal(COLA) || [];
+let procesando = false, reintento = null, espera = REINTENTO_MIN_MS;
+const alEnviar = {};   // id de la acción → qué hacer cuando por fin sale
+
+function encolar(fn, args) {
+  const item = { id: String(Date.now()) + Math.random().toString(16).slice(2), fn, args, creado: new Date().toISOString() };
+  guardarLocal(COLA, leerCola().concat(item));
+  clearTimeout(reintento);
+  reintento = setTimeout(procesarCola, espera);
+  return item.id;
+}
+const quitarDeCola = id => guardarLocal(COLA, leerCola().filter(i => i.id !== id));
+const pendiente = (fn, token) => leerCola().filter(i => i.fn === fn && i.args.p_token === token).pop();
+
+/* Una decisión nueva manda: lo viejo de la misma clase que seguía en la cola
+   (por ejemplo un "no vamos" sin señal) no puede pisarla después.
+   cual(item) dice qué descartar. */
+function descartarPendientes(cual) {
+  guardarLocal(COLA, leerCola().filter(i => !cual(i)));
+}
+const delMismoCliente = (fn, token) => i => i.fn === fn && i.args.p_token === token;
+
+/* Quien quiera enterarse de que la cola se quedó sin red (la pantalla del
+   equipo muestra "Sin conexión") pone acá qué hacer. */
+let avisarSinRed = null;
+
+/* Cuando sale el envío `id`: hacer `hacer` solo si sigue la pantalla `vista`. */
+function alSalir(id, vista, hacer) {
+  alEnviar[id] = (r, error) => { if (vistaN === vista) hacer(r, error); };
+}
+
+/* Salió el envío `id` (por la cola o directo): deja la cola y le avisa a la
+   pantalla que lo esperaba. */
+function salio(id, resultado, error = null) {
+  quitarDeCola(id);
+  const hacer = alEnviar[id];
+  delete alEnviar[id];
+  if (hacer) hacer(resultado, error);
+}
+
+/* Las claves de los links no se guardan en la cola: se ponen al enviar. Así,
+   si recepción cambió la clave y llegó el link nuevo, lo pendiente sale con
+   la clave de ahora. */
+function conClaves({ fn, args }) {
+  if (ACCIONES_EQUIPO.includes(fn)) return { ...args, p_clave: claveEquipo() };
+  if (fn === "expo_alta_rapida") return { ...args, p_clave_cartel: claveCartel() };
+  return args;
+}
+/* La clave del link dejó de valer: lo pendiente no se tira, espera el link nuevo. */
+const CLAVE_VENCIDA = new Set(["expo_clave_invalida", "expo_clave_cartel_invalida"]);
+
+/* Lo que la cola está mandando ahora. Una decisión nueva del cliente espera a
+   que llegue (ver esperarEnVuelo): si no, la vieja podría llegar después y pisarla. */
+let enVuelo = null, otraVuelta = false;
+async function esperarEnVuelo(cual) {
+  while (enVuelo && cual(enVuelo.item)) await enVuelo.promesa.catch(() => {});
+}
+
+async function procesarCola() {
+  if (procesando) { otraVuelta = true; return; }   // al terminar da otra vuelta (por ejemplo, llegó una clave nueva)
+  procesando = true;
+  otraVuelta = false;
+  clearTimeout(reintento);
+  const enPausa = new Set();   // esperan una clave nueva
+  try {
+    for (let item; (item = leerCola().find(i => !enPausa.has(i.id)));) {
+      let resultado, error = null;
+      try {
+        enVuelo = { item, promesa: rpc(item.fn, conClaves(item)) };
+        resultado = await enVuelo.promesa;
+      } catch (e) {
+        if (e instanceof ErrorRed) {
+          reintento = setTimeout(procesarCola, espera);
+          espera = Math.min(espera * 2, REINTENTO_MAX_MS);
+          if (avisarSinRed) avisarSinRed();
+          return;
+        }
+        if (CLAVE_VENCIDA.has(e.message)) { enPausa.add(item.id); continue; }
+        error = e;   // la base lo rechazó: reintentar no lo arregla
+        // queda anotado en el celular para revisar (la cola no tiene las claves de los links)
+        guardarLocal(RECHAZADOS, (leerLocal(RECHAZADOS) || []).concat({ ...item, error: e.message, cuando: new Date().toISOString() }));
+      } finally {
+        enVuelo = null;
+      }
+      if (!error && VISITA_DEL_CLIENTE.includes(item.fn)) recordarVisita(item.args.p_token, resultado);
+      salio(item.id, resultado, error);
+    }
+    espera = REINTENTO_MIN_MS;
+  } finally {
+    procesando = false;
+    if (otraVuelta) procesarCola();
+  }
+}
+window.addEventListener("online", () => { espera = REINTENTO_MIN_MS; procesarCola(); });
+
+/* ====== piezas del diseño ======
+   Los textos que reciben estas piezas ya vienen escapados (escH) por quien
+   las llama: acá solo se arma el marcado. */
+const ICONO = {
+  ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  atencion: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 7.5v5.5M12 16.6v.01"/></svg>',
+  sinRed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M8.6 16.2a5 5 0 016.8 0"/><path d="M5.2 12.7a10 10 0 014.6-2.5"/><path d="M18.8 12.7a10 10 0 00-2.3-1.6"/><path d="M2 9.2a15 15 0 015.1-3"/><path d="M22 9.2A15 15 0 0011.3 5"/><path d="M12 20h.01"/></svg>',
+  invalido: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M8.8 8.8l6.4 6.4M15.2 8.8l-6.4 6.4"/></svg>',
+  reloj: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 7v5.2l3.2 2"/></svg>',
+  lupa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20"/></svg>',
+  personas: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 19.5c.7-3.4 3-5.2 6-5.2s5.3 1.8 6 5.2"/><path d="M16 4.6a3.5 3.5 0 010 6.8M18.2 14.4c1.6.8 2.6 2.4 2.9 5.1"/></svg>',
+  flecha: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
+};
+
+const logo = () =>
+  `<span class="mr-logo"><img class="mr-logo-claro" src="${LOGO.claro}" alt="Mooving"><img class="mr-logo-oscuro" src="${LOGO.oscuro}" alt="Mooving"></span>`;
+
+function cabecera(datos, accion = "") {
+  const lineas = datos.map(d => `<span style="display:block">${escH(d)}</span>`).join("");
+  return `<header class="mr-cabecera">${logo()}<div style="display:flex;align-items:center;gap:12px"><div class="mr-cabecera-dato">${lineas}</div>${accion}</div></header>`;
+}
+
+/* Pantalla de celular: cabecera, cuerpo y (si hay) barra de abajo.
+   arriba: el check-in deja más aire arriba que el cartel (como en el diseño).
+   hueco: el espacio entre bloques, si la pantalla del diseño usa otro.
+   extra: lo que va después de la barra (el buscador repinta ahí la suya). */
+function pantalla({ datos, accion = "", cuerpo, barra = "", arriba = true, hueco = "", extra = "" }) {
+  const estilo = [arriba && "padding-top:var(--esp-6)", hueco && "gap:" + hueco].filter(Boolean).join(";");
+  return `<main class="mr-pantalla">${cabecera(datos, accion)}`
+    + `<div class="mr-cuerpo"${estilo ? ` style="${estilo}"` : ""}>${cuerpo}</div>`
+    + (barra ? `<div class="mr-barra">${barra}</div>` : "")
+    + extra + `</main>`;
+}
+
+/* Bloque de estado (ícono redondo, título y textos): recién registrado, sin
+   señal, QR inválido, expo terminada… grande = título mr-display. */
+const ESTADO_PEGADO = "padding:var(--esp-6) 0 0";   // pegado arriba, como en el check-in del diseño
+function estado({ tipo = "", icono, titulo, textos = "", grande = true, estilo = "" }) {
+  return `<div class="mr-estado${tipo ? " mr-estado--" + tipo : ""}"${estilo ? ` style="${estilo}"` : ""}>`
+    + `<div class="mr-estado-icono">${icono}</div>`
+    + `<h2 class="${grande ? "mr-display" : "mr-subtitulo"}">${titulo}</h2>${textos}</div>`;
+}
+
+/* "Registraste a / Confirmaste por / Avisaste por" + la razón social. */
+const pieRazon = (rotulo, rs, extra = "") =>
+  `<div style="border-top:1px solid var(--linea);padding-top:var(--esp-4)"><p class="mr-chico">${rotulo}</p>`
+  + `<p class="mr-resultado-razon" style="margin-top:2px">${escH(rs)}</p>${extra}</div>`;
+
+const ICONO_AVISO = { ok: ICONO.ok, atencion: ICONO.atencion, error: ICONO.sinRed };
+function aviso({ tipo, titulo, texto, icono = ICONO_AVISO[tipo], textoChico = false }) {
+  return `<div class="mr-aviso mr-aviso--${tipo}">${icono}<div><b>${titulo}</b><p${textoChico ? ' class="mr-chico"' : ""}>${texto}</p></div></div>`;
+}
+const avisoFino = ({ tipo, texto, icono = ICONO_AVISO[tipo], rol = "status" }) =>
+  `<div class="mr-aviso mr-aviso--fino mr-aviso--${tipo}" role="${rol}">${icono}<span>${texto}</span></div>`;
+const reintentando = () =>
+  avisoFino({ tipo: "atencion", icono: '<span class="mr-girando" style="color:var(--aviso)"></span>', texto: "Reintentando enviar…" });
+
+/* Cierres que se repiten en el check-in y en el cartel */
+const bienvenidos = (texto, estilo = "") =>
+  estado({ tipo: "ok", icono: ICONO.ok, titulo: "Bienvenidos,<br>ya pueden pasar", textos: `<p class="mr-texto">${texto}</p>`, estilo });
+const sinSenalPasen = (texto, estilo = "") =>
+  estado({
+    tipo: "atencion", icono: ICONO.sinRed, titulo: "No hay señal, pero ya pueden pasar", estilo,
+    textos: `<p class="mr-texto">${texto}</p>`
+      + `<p class="mr-chico">Se envía solo cuando vuelva la conexión. No cierres esta página hasta ver el tilde verde.</p>`,
+  });
+
+/* Razón social: entera, partida en el primer " - ", nunca cortada.
+   Más de 60 caracteres baja a 24 px. */
+/* "MINUCHIN MARTA LILIANA - LIBRERIA PAPELTEC" → ["MINUCHIN MARTA LILIANA", "LIBRERIA PAPELTEC"] */
+const SEPARADOR_RAZON = " - ";
+function partirRazon(texto) {
+  const i = texto.indexOf(SEPARADOR_RAZON);
+  return i > 0 ? [texto.slice(0, i), texto.slice(i + SEPARADOR_RAZON.length)] : [texto];
+}
+
+function razon(rs, datos = "") {
+  const texto = String(rs == null ? "" : rs);
+  const partes = partirRazon(texto);
+  const larga = texto.length > 60 ? " mr-razon--larga" : "";
+  return `<div><h1 class="mr-razon${larga}">${partes.map(p => `<span>${escH(p)}</span>`).join(" ")}</h1>`
+    + (datos ? `<p class="mr-razon-datos">${datos}</p>` : "") + `</div>`;
+}
+const datosCodigo = inv => [inv.codigo_erp ? `Cód. <span class="mr-num">${escH(inv.codigo_erp)}</span>` : "", escH(inv.localidad || "")]
+  .filter(Boolean).join(" · ");
+
+/* Contador de personas: 1 a 5 y "6+", que abre el ajuste fino con − y +. */
+const MAS = OPCIONES_RAPIDAS + 1;
+let contadores = 0;
+function contador(n, pregunta) {
+  const nombre = "c" + (++contadores);
+  const op = v => `<label><input type="radio" name="${nombre}" value="${v}"${n === v ? " checked" : ""}><span>${v}</span></label>`;
+  const rapidas = Array.from({ length: OPCIONES_RAPIDAS }, (_, i) => op(i + 1)).join("");
+  return `<fieldset class="mr-contador" data-contador><legend class="mr-contador-pregunta">${pregunta}</legend>`
+    + `<div class="mr-contador-opciones">${rapidas}`
+    + `<label class="mr-contador-mas-op"><input type="radio" name="${nombre}" value="${MAS}" aria-label="${MAS} o más"${n >= MAS ? " checked" : ""}><span>${MAS}+</span></label></div>`
+    + `<div class="mr-contador-mas"${n >= MAS ? "" : " hidden"}><button class="mr-boton mr-boton--secundario" type="button" aria-label="Uno menos" data-menos>−</button>`
+    + `<output>${Math.max(n, MAS)} <small>personas</small></output>`
+    + `<button class="mr-boton mr-boton--secundario" type="button" aria-label="Uno más" data-mas>+</button></div></fieldset>`;
+}
+/* Conecta el contador ya pintado: cada cambio actualiza el botón principal
+   ("Estoy acá · somos 2"). Devuelve cómo leer la cantidad elegida. */
+function conectarContador(inicial, boton, verbo) {
+  let n = inicial;
+  const fs = $("[data-contador]");
+  const mas = fs.querySelector(".mr-contador-mas"), salida = mas.querySelector("output");
+  const repintar = () => {
+    mas.hidden = n < MAS;
+    salida.firstChild.nodeValue = Math.max(n, MAS) + " ";
+    if (boton) boton.textContent = verbo + " · " + cuantos(n);
+  };
+  fs.querySelectorAll("input[type=radio]").forEach(r => r.addEventListener("change", () => { n = Number(r.value); repintar(); }));
+  fs.querySelector("[data-menos]").onclick = () => { n = Math.max(MAS, n - 1); repintar(); };
+  fs.querySelector("[data-mas]").onclick = () => { n = Math.min(MAX_PERSONAS, n + 1); repintar(); };
+  repintar();
+  return () => n;
+}
+
+/* Botón principal mientras espera: no se puede tocar dos veces. */
+function ocupar(boton, texto) {
+  boton.disabled = true;
+  boton.setAttribute("aria-busy", "true");
+  boton.innerHTML = `<span class="mr-girando"></span>${escH(texto)}`;
+}
+function liberar(boton, texto) {
+  boton.disabled = false;
+  boton.removeAttribute("aria-busy");
+  boton.textContent = texto;
+}
+
+/* ==========================================================================
+   1 · CHECK-IN DEL CLIENTE  (#t=TOKEN)
+   ========================================================================== */
+let cli = null;   // { token, d: lo que devolvió expo_ver_invitado (o lo guardado) }
+
+const CACHE_INV = t => "expoInv:" + t;
+
+/* Lo guardado se vio con señal otro día: lo que dependía de "hoy" ya no vale
+   (el turno de hoy, la visita de hoy, el estado de la expo). Si hoy hay expo,
+   se ofrece registrarse: sin señal, nadie queda frenado en la puerta. */
+function alDiaDeHoy(d) {
+  if (!d || !d.edicion) return d;
+  const hoy = hoyAR(), visto = d.edicion.hoy, dias = d.edicion.dias || [];
+  if (visto === hoy) return d;
+  const actual = { ...d, edicion: { ...d.edicion, hoy }, turno_hoy: null, visita_hoy: null };
+  if (dias.includes(hoy)) {
+    actual.estado = "en_curso";
+    actual.visita_anterior = d.visita_hoy ? { dia: visto, cantidad: d.visita_hoy.cantidad } : (d.visita_anterior || null);
+  } else if (dias.length && hoy > dias[dias.length - 1]) {
+    actual.estado = "cerrada";
+  }
+  return actual;
+}
+
+/* Lo que la base confirmó (registro o corrección) queda en lo guardado: si
+   después se abre el link sin señal, ya figura registrado con esa cantidad. */
+const VISITA_DEL_CLIENTE = ["expo_registrar_visita", "expo_corregir_cantidad"];
+function recordarVisita(token, r) {
+  const d = alDiaDeHoy(leerLocal(CACHE_INV(token)));
+  if (!d || !d.edicion || !r || !r.llegada) return;   // nunca se vio con señal: no hay qué completar
+  guardarLocal(CACHE_INV(token), { ...d, visita_hoy: { llegada: r.llegada, cantidad: r.cantidad } });
+}
+
+async function abrirCliente(token) {
+  if (!TOKEN_RE.test(token || "")) return pantallaInvalido();
+  cargando();
+  let d = null;
+  try {
+    d = await rpc("expo_ver_invitado", { p_token: token });
+    if (d && d.estado !== "invalido") guardarLocal(CACHE_INV(token), d);
+  } catch (e) {
+    if (!(e instanceof ErrorRed)) return pantallaError(e);
+    d = alDiaDeHoy(leerLocal(CACHE_INV(token)));   // lo último que se vio con señal, si hubo
+  }
+  cli = { token, d };
+
+  // un registro que quedó guardado sin señal (aunque se haya cerrado la página)
+  const guardado = pendiente("expo_registrar_visita", token);
+  if (guardado) return esperarRegistro(guardado);
+  mostrarCliente();
+}
+
+/* Qué pantalla le toca según lo que se sabe del cliente. Si hay un cambio
+   que todavía no salió (confirmar o corregir sin señal), se muestra ya
+   aplicado, con el aviso de que se está reintentando. */
+function mostrarCliente() {
+  const d = cli.d;
+  if (!d) return pantallaRegistrar({ verbo: "Estoy acá" });
+  if (d.estado === "invalido") return pantallaInvalido();
+  if (d.estado === "cerrada") return pantallaTerminada();
+  if (d.estado === "previa") {
+    const sinEnviar = pendiente("expo_confirmar", cli.token);
+    if (sinEnviar) {
+      const { p_va: va, p_cantidad: n } = sinEnviar.args;
+      cli.d = { ...d, confirmado: va, confirmado_cantidad: va ? n : null };
+    }
+    const vista = cli.d.confirmado === true ? pantallaConfirmado(!!sinEnviar)
+      : cli.d.confirmado === false ? pantallaNoVan(!!sinEnviar) : pantallaConfirmar(PERSONAS_POR_DEFECTO);
+    if (sinEnviar) alSalir(sinEnviar.id, vista, (r, error) => error ? pantallaError(error) : abrirCliente(cli.token));
+    return vista;
+  }
+  const dias = d.edicion.dias || [];
+  if (!dias.includes(d.edicion.hoy)) return pantallaFueraDeDia();
+  if (d.visita_hoy) {
+    const sinEnviar = pendiente("expo_corregir_cantidad", cli.token);
+    const v = sinEnviar ? { ...d.visita_hoy, cantidad: sinEnviar.args.p_cantidad } : d.visita_hoy;
+    const vista = pantallaYaRegistrado(v, !!sinEnviar);
+    if (sinEnviar) alSalir(sinEnviar.id, vista, (r, error) => error ? pantallaError(error) : pantallaYaRegistrado(r));
+    return vista;
+  }
+  if (d.visita_anterior) return pantallaRegistrar({ verbo: "Volvimos hoy", anterior: d.visita_anterior });
+  return pantallaRegistrar({ verbo: "Estoy acá" });
+}
+
+/* Lo de arriba a la derecha: "Expo · Miércoles 15 / Día 2 de 3", "Expo 2027 / Faltan 12 días"… */
+function datosCliente() {
+  const d = cli && cli.d;
+  if (!d || !d.edicion) return ["Expo"];
+  const { anio, hoy } = d.edicion, dias = d.edicion.dias || [];
+  if (d.estado === "cerrada") return ["Expo " + anio, "Terminó"];
+  if (d.estado === "previa") {
+    const faltan = dias.length ? diasEntre(hoy, dias[0]) : 0;
+    return ["Expo " + anio, faltan > 1 ? `Faltan ${faltan} días` : faltan === 1 ? "Falta 1 día" : "Empieza hoy"];
+  }
+  const i = dias.indexOf(hoy);
+  return i >= 0 ? ["Expo · " + capital(diaLargo(hoy)), `Día ${i + 1} de ${dias.length}`] : ["Expo " + anio];
+}
+
+const invitado = () => (cli && cli.d && cli.d.invitado) || null;
+const razonCliente = datos => invitado() ? razon(invitado().razon_social, datos) : "";
+const razonConCodigo = () => invitado() ? razon(invitado().razon_social, datosCodigo(invitado())) : "";
+const linkNoEsMiEmpresa = `<a class="mr-boton mr-boton--texto" href="#buscar" style="align-self:center;min-height:32px">¿No es tu empresa?</a>`;
+
+/* Sin registrar / ya vino otro día / sin datos por falta de señal */
+function pantallaRegistrar({ verbo, anterior = null }) {
+  const d = cli.d;
+  const turno = d && d.turno_hoy ? `<p class="mr-barra-nota">Tu turno: hoy de ${escH(horario(d.turno_hoy))}</p>` : "";
+  const avisoAnterior = anterior
+    ? aviso({ tipo: "atencion", titulo: `Ya vinieron el ${escH(diaLargo(anterior.dia))}`, texto: `${escH(personas(anterior.cantidad))}. Si hoy volvieron, registralo otra vez.` })
+    : "";
+  const avisoSinDatos = d ? "" : avisoFino({ tipo: "atencion", icono: ICONO.sinRed, rol: "note", texto: "Sin señal: no pudimos traer tus datos, pero podés registrarte igual." });
+  const vista = pintar(pantalla({
+    datos: datosCliente(),
+    cuerpo: avisoSinDatos + avisoAnterior + razonConCodigo() + contador(PERSONAS_POR_DEFECTO, "¿Cuántos vienen?"),
+    barra: `<button class="mr-boton mr-boton--principal" type="button" id="principal">${escH(verbo)} · ${cuantos(PERSONAS_POR_DEFECTO)}</button>`
+      + (anterior ? "" : turno + linkNoEsMiEmpresa),
+  }));
+  const boton = $("#principal");
+  const cantidad = conectarContador(PERSONAS_POR_DEFECTO, boton, verbo);
+  boton.onclick = () => registrar(cantidad(), boton);
+  return vista;
+}
+
+async function registrar(n, boton) {
+  if (boton.disabled) return;
+  ocupar(boton, "Registrando…");
+  const vista = vistaN, token = cli.token;
+  const llegada = new Date().toISOString();   // la hora del celular, por si no hay señal
+  try {
+    const r = await rpc("expo_registrar_visita", { p_token: token, p_cantidad: n });
+    recordarVisita(token, r);
+    if (vistaN !== vista) return;
+    return r.nueva ? pantallaRegistrado(r) : pantallaYaRegistrado(r);
+  } catch (e) {
+    // sin señal se guarda SIEMPRE, aunque ya se haya cambiado de pantalla
+    if (e instanceof ErrorRed) {
+      const id = encolar("expo_registrar_visita", { p_token: token, p_cantidad: n, p_llegada: llegada });
+      return vistaN === vista ? esperarRegistro(leerCola().find(i => i.id === id)) : procesarCola();
+    }
+    if (vistaN === vista) pantallaError(e);
+  }
+}
+
+/* "No hay señal, pero ya pueden pasar": se queda reintentando hasta el tilde verde. */
+function esperarRegistro(item) {
+  const { p_cantidad: n, p_llegada: llegada } = item.args;
+  const vista = pintar(pantalla({
+    datos: datosCliente(),
+    cuerpo: sinSenalPasen(`Guardamos el registro en este celular: <b>${escH(hora(llegada))} · ${escH(personas(n))}</b>.`, ESTADO_PEGADO)
+      + `<p class="mr-chico" style="text-align:center">Wifi de la expo: pedí la clave en la entrada.</p>`,
+    barra: reintentando(),
+  }));
+  // si se cortó la respuesta y ya estaba registrado, también es el tilde verde
+  alSalir(item.id, vista, (r, error) => error ? pantallaError(error) : pantallaRegistrado(r));
+  procesarCola();
+  return vista;
+}
+
+/* Recién registrado: respuesta inmediata, sin botón violeta. */
+function pantallaRegistrado(r) {
+  const rs = r.razon_social || (invitado() && invitado().razon_social);
+  const credencial = r.nombre_credencial || (cli.d && cli.d.nombre_credencial);
+  const vista = pintar(pantalla({
+    datos: datosCliente(),
+    cuerpo: bienvenidos(`Registrados a las <b>${escH(hora(r.llegada))}</b> · <b>${escH(personas(r.cantidad))}</b>`, ESTADO_PEGADO)
+      + (rs ? pieRazon("Registraste a", rs, credencial
+        ? `<p class="mr-chico" style="margin-top:var(--esp-3)">Tu credencial dice <b style="color:var(--tinta)">${escH(credencial)}</b></p>` : "") : ""),
+    barra: `<button class="mr-boton mr-boton--secundario mr-boton--ancho" type="button" id="corregir">Corregir la cantidad</button>`,
+  }));
+  $("#corregir").onclick = () => pantallaCorregir(r.cantidad, r);
+  return vista;
+}
+
+/* Ya registrado hoy: no se puede registrar dos veces el mismo día. */
+function pantallaYaRegistrado(v, enviando = false) {
+  const vista = pintar(pantalla({
+    datos: datosCliente(),
+    cuerpo: aviso({ tipo: "ok", titulo: "Ya están registrados hoy", texto: `A las <span class="mr-num">${escH(hora(v.llegada))}</span> · ${escH(personas(v.cantidad))}` })
+      + razonConCodigo()
+      + `<p class="mr-chico">No hace falta hacer nada más. Si llegó alguien después, corregí la cantidad.</p>`,
+    barra: (enviando ? reintentando() : "")
+      + `<button class="mr-boton mr-boton--secundario mr-boton--ancho" type="button" id="corregir">Corregir la cantidad</button>`,
+  }));
+  $("#corregir").onclick = () => pantallaCorregir(v.cantidad, v);
+  return vista;
+}
+
+/* Corregir la cantidad (no está dibujada: es el check-in con otro verbo). */
+function pantallaCorregir(actual, visita) {
+  const vista = pintar(pantalla({
+    datos: datosCliente(),
+    cuerpo: razonConCodigo() + contador(actual, "¿Cuántos son en total?"),
+    barra: `<button class="mr-boton mr-boton--principal" type="button" id="principal">Guardar · ${cuantos(actual)}</button>`
+      + `<button class="mr-boton mr-boton--texto" type="button" id="cancelar" style="align-self:center">Cancelar</button>`,
+  }));
+  const boton = $("#principal");
+  const cantidad = conectarContador(actual, boton, "Guardar");
+  $("#cancelar").onclick = () => abrirCliente(cli.token);
+  boton.onclick = async () => {
+    if (boton.disabled) return;
+    const n = cantidad(), token = cli.token;
+    ocupar(boton, "Guardando…");
+    const misma = delMismoCliente("expo_corregir_cantidad", token);
+    descartarPendientes(misma);
+    await esperarEnVuelo(misma);   // la vieja que ya salió llega antes que esta
+    try {
+      const r = await rpc("expo_corregir_cantidad", { p_token: token, p_cantidad: n });
+      recordarVisita(token, r);
+      if (vistaN === vista) pantallaYaRegistrado(r);
+    } catch (e) {
+      if (!(e instanceof ErrorRed)) return vistaN === vista ? pantallaError(e) : undefined;
+      const id = encolar("expo_corregir_cantidad", { p_token: token, p_cantidad: n });   // siempre (ver registrar)
+      if (vistaN !== vista) return;
+      const espera = pantallaYaRegistrado({ llegada: visita.llegada, cantidad: n }, true);
+      alSalir(id, espera, (r, error) => error ? pantallaError(error) : pantallaYaRegistrado(r));
+    }
+  };
+  return vista;
+}
+
+/* Antes de la expo, sin confirmar: el mismo link con otro verbo. */
+function pantallaConfirmar(n) {
+  const d = cli.d;
+  const datos = d.turno
+    ? `Tu turno: <b style="color:var(--tinta)">${escH(diaLargo(d.turno.dia))} de ${escH(horario(d.turno))}</b>`
+    : datosCodigo(d.invitado);
+  const vista = pintar(pantalla({
+    datos: datosCliente(),
+    cuerpo: razonCliente(datos) + contador(n, "¿Cuántos van a venir?"),
+    barra: `<button class="mr-boton mr-boton--principal" type="button" id="principal">Confirmo que voy · ${cuantos(n)}</button>`
+      + `<p class="mr-barra-nota">El mismo QR te sirve para entrar el día de la expo.</p>`,
+  }));
+  const boton = $("#principal");
+  const cantidad = conectarContador(n, boton, "Confirmo que voy");
+  boton.onclick = () => confirmar(true, cantidad(), boton);
+  return vista;
+}
+
+async function confirmar(va, n, boton) {
+  if (boton.disabled) return;
+  ocupar(boton, va ? "Confirmando…" : "Avisando…");
+  const vista = vistaN, token = cli.token;
+  const args = { p_token: token, p_cantidad: va ? n : null, p_va: va };
+  const misma = delMismoCliente("expo_confirmar", token);
+  descartarPendientes(misma);   // lo último que se decidió es lo que vale…
+  await esperarEnVuelo(misma);  // …y la vieja que ya salió llega antes que esta
+  const despues = d => {
+    cli.d = d;
+    guardarLocal(CACHE_INV(token), d);
+    return va ? pantallaConfirmado() : pantallaNoVan();
+  };
+  try {
+    const d = await rpc("expo_confirmar", args);
+    if (vistaN === vista) despues(d);
+  } catch (e) {
+    if (!(e instanceof ErrorRed)) return vistaN === vista ? pantallaError(e) : undefined;
+    const id = encolar("expo_confirmar", args);   // siempre (ver registrar)
+    if (vistaN !== vista) return;
+    cli.d = { ...cli.d, confirmado: va, confirmado_cantidad: va ? n : null };
+    const espera = va ? pantallaConfirmado(true) : pantallaNoVan(true);
+    alSalir(id, espera, (d, error) => error ? pantallaError(error) : despues(d));
+  }
+}
+
+/* Antes de la expo, confirmado: se puede cambiar hasta el día. */
+function pantallaConfirmado(enviando = false) {
+  const d = cli.d;
+  const cuando = d.turno ? `<b>${escH(capital(diaLargo(d.turno.dia)))} de ${escH(horario(d.turno))}</b><br>` : "";
+  const vista = pintar(pantalla({
+    datos: datosCliente(),
+    cuerpo: estado({
+      tipo: "ok", icono: ICONO.ok, titulo: "Listo, los esperamos", estilo: ESTADO_PEGADO,
+      textos: `<p class="mr-texto">${cuando}${escH(personas(d.confirmado_cantidad || PERSONAS_POR_DEFECTO))}</p>`
+        + `<p class="mr-chico">Guardá el mail: ese mismo QR lo escaneás en la puerta.</p>`,
+    }) + pieRazon("Confirmaste por", d.invitado.razon_social),
+    barra: (enviando ? reintentando() : "")
+      + `<button class="mr-boton mr-boton--secundario mr-boton--ancho" type="button" id="cambiar">Cambiar la cantidad</button>`
+      + `<button class="mr-boton mr-boton--texto" type="button" id="nova" style="align-self:center">No vamos a poder ir</button>`,
+  }));
+  $("#cambiar").onclick = () => pantallaConfirmar(d.confirmado_cantidad || PERSONAS_POR_DEFECTO);
+  $("#nova").onclick = () => confirmar(false, null, $("#nova"));
+  return vista;
+}
+
+/* Avisaron que no van (decidido el 06/10: "Gracias por avisar" + "Al final sí vamos"). */
+function pantallaNoVan(enviando = false) {
+  const vista = pintar(pantalla({
+    datos: datosCliente(),
+    cuerpo: estado({
+      icono: ICONO.ok, titulo: "Gracias por avisar", estilo: ESTADO_PEGADO,
+      textos: `<p class="mr-chico">Si al final pueden venir, avisanos desde este mismo link.</p>`,
+    }) + pieRazon("Avisaste por", cli.d.invitado.razon_social),
+    barra: (enviando ? reintentando() : "")
+      + `<button class="mr-boton mr-boton--secundario mr-boton--ancho" type="button" id="sivamos">Al final sí vamos</button>`,
+  }));
+  $("#sivamos").onclick = () => pantallaConfirmar(PERSONAS_POR_DEFECTO);
+  return vista;
+}
+
+/* En curso, pero hoy no es día de expo (decidido el 06/10): dice cuándo sigue. */
+function pantallaFueraDeDia() {
+  const { hoy, dias = [], hora_apertura } = cli.d.edicion;
+  const proximo = dias.find(x => x > hoy);
+  const titulo = !proximo ? `La expo terminó el ${diaLargo(dias[dias.length - 1])}`
+    : hoy < dias[0] ? `La expo empieza el ${diaLargo(proximo)}` : `La expo sigue el ${diaLargo(proximo)}`;
+  return pintar(pantalla({
+    datos: datosCliente(),
+    cuerpo: razonConCodigo() + estado({
+      icono: ICONO.reloj, titulo: escH(titulo), grande: false, estilo: "padding:var(--esp-4) 0",
+      textos: proximo && hora_apertura ? `<p class="mr-chico">Abre a las ${escH(apertura(hora_apertura))}.</p>` : "",
+    }),
+  }));
+}
+
+/* Expo terminada: el link sigue vivo y deriva al vendedor asignado. */
+function pantallaTerminada() {
+  const d = cli.d, dias = d.edicion.dias || [];
+  const quien = d.vendedor ? `hablá con <b style="color:var(--tinta)">${escH(d.vendedor)}</b>, tu vendedor` : "hablá con tu vendedor";
+  return pintar(pantalla({
+    datos: datosCliente(),
+    cuerpo: razonConCodigo() + estado({
+      icono: ICONO.reloj, titulo: `La expo terminó el ${escH(diaLargo(dias[dias.length - 1]))}`, grande: false, estilo: "padding:var(--esp-4) 0",
+      textos: `<p class="mr-chico">Gracias por venir. Para hacer tu pedido, ${quien}.</p>`,
+    }),
+  }));
+}
+
+/* QR inválido: la única salida es el buscador del cartel. Sin la clave del
+   cartel en este celular, se le pide escanear el QR del cartel
+   (decidido el 06/10). */
+function pantallaInvalido() {
+  const conCartel = !!claveCartel();
+  return pintar(pantalla({
+    datos: ["Expo"],
+    cuerpo: estado({
+      tipo: "error", icono: ICONO.invalido, titulo: "No reconocemos este QR",
+      textos: `<p class="mr-chico">Puede ser de otro año, o el link se cortó al reenviarlo. Buscá tu empresa por nombre: tarda lo mismo.</p>`,
+    }),
+    barra: conCartel
+      ? `<a class="mr-boton mr-boton--principal" href="#buscar">Buscar mi empresa</a>`
+      : `<p class="mr-barra-nota">Escaneá el QR del cartel de la entrada y buscá tu empresa.</p>`,
+  }));
+}
+
+/* La base rechazó algo (no es falta de señal). */
+function pantallaError(e) {
+  const vista = pintar(pantalla({
+    datos: datosCliente(),
+    cuerpo: aviso({ tipo: "error", icono: ICONO.atencion, titulo: "No se pudo completar", texto: escH(mensajeDe(e)), textoChico: true }),
+    barra: `<button class="mr-boton mr-boton--principal" type="button" id="denuevo">Probar de nuevo</button>`,
+  }));
+  $("#denuevo").onclick = () => navegar();
+  return vista;
+}
+
+/* ==========================================================================
+   2 · CARTEL DE LA ENTRADA  (#cartel=CLAVE → #buscar, #alta)
+   La clave del QR impreso queda en el celular: sin ella la base no deja
+   buscar ni dar de alta.
+   ========================================================================== */
+const CLAVE_CARTEL = "expoCartel";
+const claveCartel = () => leerClave(CLAVE_CARTEL);
+let ultimaBusqueda = "";
+
+const datosCartel = () => ["Registro", capital(diaLargo(hoyAR()))];
+
+/* sin tildes, sin mayúsculas, carácter por carácter (mismo largo que el
+   original, para poder resaltar en el texto de verdad) */
+const sinTilde = c => c.normalize("NFD").charAt(0).toLowerCase();
+const normalizar = t => Array.from(String(t), sinTilde).join("").replace(/\./g, "").replace(/[^a-z0-9ñ]+/g, " ").trim();
+const alcanzaParaBuscar = t => normalizar(t).replace(/ /g, "").length >= MIN_LETRAS_BUSQUEDA;
+
+/* Marca en la razón social cada palabra buscada (todo escapado). */
+function resaltar(texto, q) {
+  const base = Array.from(texto, sinTilde);
+  const marca = base.map(() => false);
+  for (const p of normalizar(q).split(" ").filter(Boolean)) {
+    const i = base.join("").indexOf(p);
+    if (i >= 0) for (let k = i; k < i + p.length; k++) marca[k] = true;
+  }
+  let html = "", dentro = false;
+  Array.from(texto).forEach((c, k) => {
+    if (marca[k] !== dentro) { html += marca[k] ? '<mark class="mr-encontrado">' : "</mark>"; dentro = marca[k]; }
+    html += escH(c);
+  });
+  return html + (dentro ? "</mark>" : "");
+}
+
+function pantallaSinClaveCartel() {
+  return pintar(pantalla({
+    datos: ["Registro"],
+    arriba: false,
+    cuerpo: estado({
+      icono: ICONO.lupa, titulo: "Escaneá el QR del cartel de la entrada", grande: false,
+      textos: `<p class="mr-chico">Para buscar tu empresa, apuntá la cámara del celular al QR del cartel.</p>`,
+    }),
+  }));
+}
+
+let busquedaN = 0, demora = null;
+
+function pantallaBuscar() {
+  if (!claveCartel()) return pantallaSinClaveCartel();
+  if (altaPendiente()) return esperarAlta(altaPendiente());
+  const vista = pintar(pantalla({
+    datos: datosCartel(),
+    arriba: false,
+    cuerpo: `<h1 class="mr-titulo">Buscá tu empresa</h1>`
+      + `<label class="mr-buscador">${ICONO.lupa}<span class="mr-oculto">Buscá tu empresa</span>`
+      + `<input class="mr-entrada" type="search" id="q" placeholder="Ej.: Papeltec" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="80">`
+      + `<button class="mr-buscador-limpiar" type="button" aria-label="Borrar" id="limpiar" hidden>×</button></label>`
+      + `<div id="resultados" style="display:contents"></div>`,
+    extra: `<div id="barra" style="display:contents"></div>`,   // la barra de abajo cambia según el resultado
+  }));
+  const q = $("#q");
+  q.value = ultimaBusqueda;
+  q.addEventListener("input", () => { clearTimeout(demora); demora = setTimeout(buscar, DEMORA_BUSQUEDA_MS); });
+  $("#limpiar").onclick = () => { q.value = ""; buscar(); q.focus(); };
+  buscar();
+  q.focus();   // "Abre con el teclado listo"
+  return vista;
+}
+
+function mostrarResultados(cuerpo, barra = "") {
+  $("#resultados").innerHTML = cuerpo;
+  $("#barra").innerHTML = barra ? `<div class="mr-barra">${barra}</div>` : "";
+}
+const noAparecés = `<div style="text-align:center;border-top:1px solid var(--linea);padding-top:var(--esp-4)"><p class="mr-chico">¿No aparecés?</p>`
+  + `<a class="mr-boton mr-boton--secundario mr-boton--ancho" href="#alta" style="margin-top:var(--esp-2)">Registrarme sin estar en la lista</a></div>`;
+
+async function buscar() {
+  const q = $("#q");
+  if (!q) return;
+  const texto = q.value;
+  ultimaBusqueda = texto;
+  $("#limpiar").hidden = !texto;
+  const n = ++busquedaN;
+  if (!alcanzaParaBuscar(texto)) {
+    return mostrarResultados(`<p class="mr-chico">Escribí al menos ${MIN_LETRAS_BUSQUEDA} letras: la razón social, el nombre del local o tu código de cliente. No importan tildes ni mayúsculas.</p>` + noAparecés);
+  }
+  let filas;
+  try {
+    filas = await rpc("expo_buscar", { p_clave: claveCartel(), p_texto: texto });
+  } catch (e) {
+    if (n !== busquedaN) return;
+    if (e instanceof ErrorServidor && e.message === "expo_clave_cartel_invalida") {
+      borrarLocal(CLAVE_CARTEL);
+      return pantallaSinClaveCartel();
+    }
+    mostrarResultados(
+      aviso({ tipo: "error", titulo: "No pudimos buscar", texto: "Revisá la señal o conectate al wifi de la expo.", textoChico: true }),
+      `<button class="mr-boton mr-boton--principal" type="button" id="denuevo">Probar de nuevo</button>`);
+    $("#denuevo").onclick = buscar;
+    return;
+  }
+  if (n !== busquedaN) return;   // llegó tarde: ya se escribió otra cosa
+  filas = (filas || []).filter(f => TOKEN_RE.test(f.token || ""));
+  if (!filas.length) {
+    return mostrarResultados(
+      estado({
+        icono: ICONO.lupa, titulo: `No encontramos “${escH(texto.trim())}”`, grande: false, estilo: "padding:var(--esp-6) 0",
+        textos: `<p class="mr-chico">Probá con una sola palabra, o con el nombre que figura en la factura.</p>`,
+      }),
+      `<a class="mr-boton mr-boton--principal" href="#alta">Registrarme igual</a>`);
+  }
+  mostrarResultados(
+    `<ul class="mr-lista">${filas.map(f => `<li><button class="mr-resultado" type="button" data-token="${f.token}"><span class="mr-resultado-texto">`
+      + `<span class="mr-resultado-razon">${resaltar(f.razon_social || "", texto)}</span>`
+      + `<span class="mr-chico" style="display:block">${[escH(f.localidad || ""), f.codigo_erp ? `Cód. <span class="mr-num">${escH(f.codigo_erp)}</span>` : ""].filter(Boolean).join(" · ")}</span>`
+      + `</span><span class="mr-resultado-flecha">${ICONO.flecha}</span></button></li>`).join("")}</ul>`
+    + `<p class="mr-chico" style="text-align:center">${filas.length === 1 ? "1 resultado" : filas.length + " resultados"}</p>`
+    + noAparecés);
+  // tocar un resultado abre la pantalla 1 de ese cliente
+  document.querySelectorAll(".mr-resultado[data-token]").forEach(b => {
+    b.onclick = () => { location.hash = "t=" + b.dataset.token; };
+  });
+}
+
+/* Alta rápida: acá se separa el 12 % que no es cliente. */
+const CATEGORIAS = [
+  ["cliente", "Soy cliente de Mooving"],
+  ["cliente_de_cliente", "Vengo con un cliente"],
+  ["proveedor", "Soy proveedor"],
+  ["comex", "Comex (despachante, forwarder)"],
+  ["licencia", "Agente de licencias"],
+];
+
+function pantallaAlta() {
+  if (!claveCartel()) return pantallaSinClaveCartel();
+  if (altaPendiente()) return esperarAlta(altaPendiente());
+  const empresa = alcanzaParaBuscar(ultimaBusqueda) ? ultimaBusqueda.trim() : "";
+  const vista = pintar(pantalla({
+    datos: ["Registrarme"],
+    accion: `<a class="mr-boton mr-boton--texto" href="#buscar" style="min-height:32px">Volver</a>`,
+    arriba: false,
+    cuerpo: `<div id="faltan" style="display:contents"></div>`
+      + `<label class="mr-campo"><span>Tu nombre</span><input class="mr-entrada" id="nombre" autocomplete="name" maxlength="80"></label>`
+      + `<label class="mr-campo"><span>Empresa o comercio</span><input class="mr-entrada" id="empresa" autocomplete="organization" maxlength="120" value="${escH(empresa)}"></label>`
+      + `<fieldset class="mr-contador"><legend class="mr-contador-pregunta" style="font-size:14px;line-height:20px;margin-bottom:6px">¿Cómo venís a la expo?</legend><div class="mr-opciones-categoria">`
+      + CATEGORIAS.map(([v, t], i) => `<label><input type="radio" name="cat" value="${v}"${i === 0 ? " checked" : ""}>${t}</label>`).join("")
+      + `</div></fieldset>`
+      + `<label class="mr-campo"><span>CUIT o código de cliente <small>(si lo tenés a mano)</small></span><input class="mr-entrada" id="cuit" inputmode="numeric" placeholder="Opcional" maxlength="20"></label>`
+      + contador(PERSONAS_POR_DEFECTO, "¿Cuántos vienen?"),
+    barra: `<button class="mr-boton mr-boton--principal" type="button" id="principal">Registrarme · ${cuantos(PERSONAS_POR_DEFECTO)}</button>`,
+  }));
+  const boton = $("#principal");
+  const cantidad = conectarContador(PERSONAS_POR_DEFECTO, boton, "Registrarme");
+  boton.onclick = () => darDeAlta(cantidad(), boton);
+  return vista;
+}
+
+async function darDeAlta(n, boton) {
+  if (boton.disabled) return;
+  const campo = id => $("#" + id).value.replace(/\s+/g, " ").trim();
+  const nombre = campo("nombre"), empresa = campo("empresa"), cuit = campo("cuit");
+  const faltaNombre = nombre.length < MIN_LARGO_NOMBRE, faltaEmpresa = empresa.length < MIN_LARGO_NOMBRE;
+  $("#nombre").setAttribute("aria-invalid", String(faltaNombre));
+  $("#empresa").setAttribute("aria-invalid", String(faltaEmpresa));
+  const faltan = [];
+  if (faltaNombre) faltan.push("tu nombre");
+  if (faltaEmpresa) faltan.push("la empresa o el comercio");
+  if (faltan.length) {
+    $("#faltan").innerHTML = avisoFino({ tipo: "error", icono: ICONO.atencion, rol: "alert", texto: `Falta ${faltan.join(" y ")}.` });
+    return $(faltaNombre ? "#nombre" : "#empresa").focus();
+  }
+  const categoria = (document.querySelector('input[name="cat"]:checked') || {}).value || "cliente";
+  const args = {   // sin la clave del cartel: se pone al enviar (conClaves)
+    p_nombre: nombre, p_empresa: empresa, p_categoria: categoria,
+    p_cuit: cuit || null, p_cantidad: n, p_clave: crypto.randomUUID(),   // la clave hace que un reintento no duplique
+  };
+  ocupar(boton, "Registrando…");
+  const vista = vistaN;
+  // queda guardada ANTES de mandarla: si se recarga a mitad, el reintento usa
+  // la misma clave y la base no la duplica
+  const id = encolar("expo_alta_rapida", args);
+  ultimaBusqueda = "";
+  alSalir(id, vista, (r, error) => {
+    if (!error) return pantallaAltaLista(r.razon_social || empresa, r.llegada, r.cantidad);
+    liberar(boton, "Registrarme · " + cuantos(n));
+    $("#faltan").innerHTML = avisoFino({ tipo: "error", icono: ICONO.atencion, rol: "alert", texto: escH(mensajeDe(error)) });
+  });
+  try {
+    salio(id, await rpc("expo_alta_rapida", conClaves({ fn: "expo_alta_rapida", args })));
+  } catch (e) {
+    if (!(e instanceof ErrorRed)) return salio(id, undefined, e);
+    // sin señal: sigue en la cola; si la cola no la mandó ya, se espera
+    const item = leerCola().find(i => i.id === id);
+    if (item && vistaN === vista) esperarAlta(item);
+  }
+}
+
+/* "No hay señal, pero ya pueden pasar": el alta espera en la cola. También
+   al volver al cartel o al recargar, así nadie la carga dos veces. */
+const altaPendiente = () => leerCola().find(i => i.fn === "expo_alta_rapida");
+function esperarAlta(item) {
+  const { p_empresa: empresa, p_cantidad: n } = item.args;
+  const vista = pintar(pantalla({
+    datos: datosCartel(),
+    arriba: false,
+    cuerpo: sinSenalPasen(`<b>${escH(empresa)}</b><br>${escH(hora(item.creado))} · ${escH(personas(n))}`),
+    barra: reintentando(),
+  }));
+  alSalir(item.id, vista, (r, error) => error ? pantallaError(error) : pantallaAltaLista(r.razon_social || empresa, r.llegada, r.cantidad));
+  procesarCola();
+  return vista;
+}
+
+/* Alta lista: mismo cierre que el check-in. */
+function pantallaAltaLista(empresa, llegada, n) {
+  return pintar(pantalla({
+    datos: datosCartel(),
+    arriba: false,
+    cuerpo: bienvenidos(`<b>${escH(empresa)}</b><br>${escH(hora(llegada))} · ${escH(personas(n))}`),
+  }));
+}
+
+/* ==========================================================================
+   3 · EQUIPO DE RECORRIDO  (#equipo=CLAVE → #recorrido)
+   El link del equipo lleva una clave (decidido el 06/10: opción A). La clave
+   y quién es cada uno quedan en el celular: "Sin usuario ni clave".
+   Lo normal es "Lo atiende su vendedor" (nada cargado); "Me anoto" registra
+   la excepción. Nunca se carga el vendedor como recorrido: solo se manda el
+   id de la persona del equipo que eligió "¿Quién sos?".
+   ========================================================================== */
+const CLAVE_EQUIPO = "expoEquipo";
+const YO = "expoYo";                        // { id, nombre, rol } de "¿Quién sos?"
+const PRESENTES_GUARDADOS = "expoPresentes";
+const LISTA_EQUIPO = "expoEquipoLista";
+const ACCIONES_EQUIPO = ["expo_anotarme", "expo_bajarme", "expo_tome_pedido"];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const claveEquipo = () => leerClave(CLAVE_EQUIPO);
+const yo = () => { const y = leerLocal(YO); return y && UUID_RE.test(y.id || "") ? y : null; };
+const fmtDiaCorto = new Intl.DateTimeFormat("es-AR", { weekday: "short", timeZone: "UTC" });
+const diaCorto = iso => capital(fmtDiaCorto.format(fechaDe(iso)).replace(".", "")) + " " + fechaDe(iso).getUTCDate();   // "Mié 15"
+const ROLES = { hostess: "Hostess", marketing: "Marketing" };
+const CATEGORIA_INSIGNIA = {
+  comex: ["comex", "Comex"],
+  proveedor: ["proveedor", "Proveedor"],
+  licencia: ["licencia", "Agente de licencia"],
+  cliente_de_cliente: ["cliente-de-cliente", "Cliente de un cliente"],
+};
+
+/* "Sofía Giménez" → "Sofía G." (como en el diseño) */
+function corto(nombre) {
+  const p = String(nombre || "").trim().split(/\s+/);
+  return p.length > 1 ? `${p[0]} ${p[p.length - 1].charAt(0).toUpperCase()}.` : p[0];
+}
+/* "Ana L. y Camila R." / "Ana L., Camila R. y vos" */
+function enumerar(nombres) {
+  return nombres.length < 2 ? nombres.join("") : nombres.slice(0, -1).join(", ") + " y " + nombres[nombres.length - 1];
+}
+/* "MINUCHIN MARTA LILIANA - LIBRERIA PAPELTEC" → "Libreria Papeltec": el nombre
+   del local, con mayúscula inicial, para la tostada. Las tildes que no están
+   en Finnegans no se pueden adivinar. */
+function nombreDelLocal(rs) {
+  const partes = partirRazon(String(rs || ""));
+  return partes[partes.length - 1].toLowerCase().replace(/(^|\s)(\S)/g, (_, a, b) => a + b.toUpperCase());
+}
+
+/* La pantalla del equipo que está abierta:
+   { clave, yo, vista, datos (expo_presentes), vistoEn, sinRed, aviso, filtro, q, tostada } */
+let eq = null;
+
+function pantallaEquipoSinClave() {
+  return pintar(pantalla({
+    datos: ["Recorridos"],
+    arriba: false,
+    cuerpo: estado({
+      tipo: "error", icono: ICONO.invalido, titulo: "Este link del equipo ya no sirve", grande: false,
+      textos: `<p class="mr-chico">Pedile a recepción el link nuevo del equipo de recorrido.</p>`,
+    }),
+  }));
+}
+function claveEquipoVencida() {
+  borrarLocal(CLAVE_EQUIPO);
+  return pantallaEquipoSinClave();
+}
+
+/* Lo que todavía no salió (en la cola) ya se ve aplicado en la lista. */
+function aplicarAccion(datos, { fn, args }, nombre) {
+  const p = (datos.presentes || []).find(x => x.visita_id === args.p_visita);
+  if (!p) return;
+  const estoy = p.recorrido.some(r => r.id === args.p_equipo);
+  if (fn === "expo_anotarme" && !estoy) p.recorrido = p.recorrido.concat({ id: args.p_equipo, nombre, tomo_pedido: false });
+  if (fn === "expo_bajarme") p.recorrido = p.recorrido.filter(r => r.id !== args.p_equipo);
+  if (fn === "expo_tome_pedido") p.recorrido = p.recorrido.map(r => r.id === args.p_equipo ? { ...r, tomo_pedido: args.p_tomo } : r);
+}
+const accionesPendientes = idEquipo => leerCola().filter(i => ACCIONES_EQUIPO.includes(i.fn) && i.args.p_equipo === idEquipo);
+
+/* "¿Quién sos?": se elige una vez y queda en el celular. Si ya había alguien
+   elegido, "Volver" deja todo como estaba. */
+async function pantallaQuienSos() {
+  const clave = claveEquipo();
+  if (!clave) return pantallaEquipoSinClave();
+  const vista = pintar(pantalla({
+    datos: ["Recorridos · " + diaCorto(hoyAR())],
+    accion: yo() ? `<button class="mr-boton mr-boton--texto" type="button" id="volverRecorrido" style="min-height:32px">Volver</button>` : "",
+    arriba: false,
+    hueco: "var(--esp-4)",
+    cuerpo: `<div><h1 class="mr-titulo">¿Quién sos?</h1>`
+      + `<p class="mr-chico" style="margin-top:4px">Se elige una vez y queda guardado en este celular. Sin usuario ni clave.</p></div>`
+      + `<div class="mr-buscador">${ICONO.lupa}<input class="mr-entrada" type="search" id="quien" aria-label="Buscá tu nombre" autocomplete="off" style="font-size:18px"></div>`
+      + `<div id="listaEquipo" style="display:contents"></div>`
+      + `<p class="mr-chico">¿No estás? Pedile a recepción que te agregue.</p>`,
+  }));
+  let lista = leerLocal(LISTA_EQUIPO) || [];
+  const pintarLista = () => {
+    const q = normalizar($("#quien").value);
+    const quienes = lista.filter(p => !q || normalizar(p.nombre).includes(q));
+    $("#listaEquipo").innerHTML = quienes.length ? `<ul class="mr-lista">${quienes.map(p =>
+      `<li><button class="mr-resultado" type="button" data-id="${escH(p.id)}" style="min-height:56px"><span class="mr-resultado-texto">`
+      + `<span class="mr-resultado-razon">${escH(p.nombre)}</span><span class="mr-chico" style="display:block">${escH(ROLES[p.rol] || "")}</span>`
+      + `</span><span class="mr-resultado-flecha">${ICONO.flecha}</span></button></li>`).join("")}</ul>` : "";
+    document.querySelectorAll("#listaEquipo [data-id]").forEach(b => {
+      b.onclick = () => {
+        const p = lista.find(x => x.id === b.dataset.id);
+        guardarLocal(YO, { id: p.id, nombre: p.nombre, rol: p.rol });
+        pantallaRecorrido();
+      };
+    });
+  };
+  if ($("#volverRecorrido")) $("#volverRecorrido").onclick = () => pantallaRecorrido();
+  $("#quien").addEventListener("input", pintarLista);
+  pintarLista();
+  $("#quien").focus();
+  try {
+    lista = await rpc("expo_equipo_lista", { p_clave: clave }) || [];
+    guardarLocal(LISTA_EQUIPO, lista);
+  } catch (e) {
+    if (vistaN !== vista) return;
+    if (e instanceof ErrorServidor && e.message === "expo_clave_invalida") return claveEquipoVencida();
+    // sin señal: queda la lista que se vio la última vez (si hubo)
+  }
+  if (vistaN === vista) pintarLista();
+}
+
+/* Presentes del día: cabecera, buscador y una lista que se repinta sola. */
+function pantallaRecorrido() {
+  const clave = claveEquipo(), quien = yo();
+  if (!clave) return pantallaEquipoSinClave();
+  if (!quien) return pantallaQuienSos();
+  // lo guardado sirve solo si es de hoy y de esta persona: la lista de ayer no se usa
+  const guardados = leerLocal(PRESENTES_GUARDADOS);
+  const sirve = guardados && guardados.equipo === quien.id && guardados.datos && guardados.datos.hoy === hoyAR();
+  const vista = pintar(pantalla({
+    datos: ["Recorridos · " + diaCorto(hoyAR())],
+    accion: `<button class="mr-boton mr-boton--texto" type="button" id="quiensoy" style="min-height:32px" aria-label="Cambiar de persona (ahora: ${escH(quien.nombre)})">${escH(corto(quien.nombre))} ▾</button>`,
+    arriba: false,
+    hueco: "var(--esp-3)",
+    cuerpo: `<div id="sinred" style="display:contents"></div>`
+      + `<div class="mr-buscador" style="margin-bottom:2px">${ICONO.lupa}<input class="mr-entrada" type="search" id="buscarPresente" placeholder="Buscar presente" aria-label="Buscar presente" autocomplete="off" style="min-height:48px;font-size:16px"></div>`
+      + `<div id="presentes" style="display:contents"></div>`
+      + `<div id="tostada" style="display:contents"></div>`,
+  }));
+  eq = {
+    clave, yo: quien, vista, filtro: "todos", q: "", tostada: null, aviso: "", sinRed: false,
+    datos: sirve ? guardados.datos : null, vistoEn: sirve ? guardados.vistoEn : null,
+  };
+  $("#quiensoy").onclick = () => pantallaQuienSos();
+  $("#buscarPresente").addEventListener("input", e => { eq.q = e.target.value; repintarPresentes(); });
+  // los toques de la lista se atienden acá una sola vez (la lista se repinta seguido)
+  $("#presentes").addEventListener("click", tocarEnLaLista);
+  $("#presentes").addEventListener("change", tocarEnLaLista);
+  avisarSinRed = () => { if (eq && vistaN === eq.vista) { eq.sinRed = true; repintarPresentes(); } };
+  repintarPresentes();
+  cargarPresentes(vista);
+  const reloj = setInterval(() => (vistaN === vista ? cargarPresentes(vista) : clearInterval(reloj)), REFRESCO_PRESENTES_MS);
+  return vista;
+}
+
+function tocarEnLaLista(e) {
+  const t = e.target;
+  if (e.type === "change" && t.dataset.pedido) return accionEquipo("expo_tome_pedido", t.dataset.pedido, t.checked);
+  if (e.type !== "click") return;
+  const b = t.closest("button");
+  if (!b) return;
+  if (b.dataset.filtro) { eq.filtro = b.dataset.filtro; return repintarPresentes(); }
+  if (b.dataset.anotar) return accionEquipo("expo_anotarme", b.dataset.anotar);
+  if (b.dataset.bajar) return accionEquipo("expo_bajarme", b.dataset.bajar);
+}
+
+async function cargarPresentes(vista) {
+  try {
+    const datos = await rpc("expo_presentes", { p_clave: eq.clave, p_equipo: eq.yo.id });
+    if (vistaN !== vista) return;
+    eq.datos = datos;
+    eq.vistoEn = Date.now();
+    eq.sinRed = false;
+    guardarLocal(PRESENTES_GUARDADOS, { equipo: eq.yo.id, datos, vistoEn: eq.vistoEn });
+  } catch (e) {
+    if (vistaN !== vista) return;
+    if (e instanceof ErrorServidor && e.message === "expo_clave_invalida") return claveEquipoVencida();
+    if (e instanceof ErrorServidor && e.message === "expo_equipo_invalido") {
+      borrarLocal(YO);   // ya no está en el equipo activo: que vuelva a elegir
+      return pantallaQuienSos();
+    }
+    eq.sinRed = true;
+  }
+  repintarPresentes();
+}
+
+/* Repinta los avisos, los filtros y las tarjetas (el buscador queda: no pierde
+   el foco). Lo que tenía el foco lo vuelve a tener después. */
+function repintarPresentes() {
+  if (!eq || vistaN !== eq.vista) return;
+  const avisos = (eq.aviso ? avisoFino({ tipo: "error", icono: ICONO.atencion, rol: "alert", texto: escH(eq.aviso) }) : "")
+    + (eq.sinRed ? avisoFino({ tipo: "error", icono: ICONO.sinRed, texto: `<b style="display:inline">Sin conexión.</b> ${escH(antiguedad(eq.vistoEn))} Lo que anotes se envía cuando vuelva.` }) : "");
+  cambiarSiHaceFalta($("#sinred"), avisos);   // si no cambió, no se vuelve a anunciar
+
+  const datos = eq.datos ? structuredClone(eq.datos) : { presentes: [] };
+  accionesPendientes(eq.yo.id).forEach(i => aplicarAccion(datos, i, eq.yo.nombre));
+  const todos = (datos.presentes || []).slice().sort((a, b) => new Date(b.llegada) - new Date(a.llegada));   // los últimos arriba
+
+  const volverAlFoco = recordarFoco();
+  $("#presentes").innerHTML = todos.length ? listaDePresentes(todos) : nadieLlego(datos);
+  volverAlFoco();
+  cambiarSiHaceFalta($("#tostada"), eq.tostada
+    ? `<div class="mr-tostada" role="status" style="position:sticky;bottom:12px">${escH(eq.tostada.texto)} <button class="mr-boton mr-boton--texto" type="button" id="deshacer">Deshacer</button></div>`
+    : "");
+  if (eq.tostada) $("#deshacer").onclick = () => accionEquipo("expo_bajarme", eq.tostada.visita);
+}
+
+function cambiarSiHaceFalta(caja, html) {
+  if (caja.dataset.html !== html) { caja.innerHTML = html; caja.dataset.html = html; }
+}
+
+/* Qué tenía el foco (el botón o la casilla de una tarjeta, o un filtro) para
+   devolvérselo cuando se repinta la lista. */
+function recordarFoco() {
+  const a = document.activeElement;
+  if (!a || !$("#presentes").contains(a)) return () => {};
+  const tarjeta = a.closest("[data-visita]");
+  const selector = a.dataset.filtro ? `[data-filtro="${a.dataset.filtro}"]`
+    : tarjeta ? `[data-visita="${tarjeta.dataset.visita}"] ${a.dataset.pedido ? "[data-pedido]" : ".mr-presente-pie .mr-boton"}` : null;
+  return () => { const otra = selector && $("#presentes " + selector); if (otra) otra.focus({ preventScroll: true }); };
+}
+
+function nadieLlego(datos) {
+  const abre = datos.estado === "en_curso" && datos.es_dia && datos.hora_apertura
+    ? `Las puertas abren a las ${escH(apertura(datos.hora_apertura))}. ` : "";
+  return estado({
+    icono: ICONO.personas, titulo: "Todavía no llegó nadie", grande: false,
+    textos: `<p class="mr-chico">${abre}La lista se actualiza sola: no hace falta recargar.</p>`,
+  });
+}
+
+function listaDePresentes(todos) {
+  const esMio = p => p.recorrido.some(r => r.id === eq.yo.id);
+  const grupos = { todos, sin: todos.filter(p => !p.recorrido.length), mios: todos.filter(esMio) };
+  const q = normalizar(eq.q);
+  const visibles = grupos[eq.filtro].filter(p => !q || q.split(" ").every(w => normalizar(p.razon_social).includes(w)));
+  const chip = (clave, texto) =>
+    `<button class="mr-chip" type="button" data-filtro="${clave}" aria-pressed="${eq.filtro === clave}">${texto} <span class="mr-num">${grupos[clave].length}</span></button>`;
+  const chips = `<div class="mr-chips" role="group" aria-label="Filtro">${chip("todos", "Todos")}${chip("sin", "Sin recorrido")}${chip("mios", "Míos")}</div>`;
+  if (visibles.length) return chips + visibles.map(p => tarjeta(p, esMio(p))).join("");
+  if (q) return chips + estado({ icono: ICONO.lupa, titulo: `No encontramos “${escH(eq.q.trim())}”`, grande: false });
+  if (eq.filtro === "mios") {
+    return chips + estado({
+      icono: ICONO.personas, titulo: "Todavía no te anotaste con nadie", grande: false,
+      textos: `<p class="mr-chico">Tocá “Me anoto” en un presente para que figure que le hacés el recorrido.</p>`
+        + `<button class="mr-boton mr-boton--secundario" type="button" data-filtro="sin">Ver sin recorrido</button>`,
+    });
+  }
+  return chips + estado({ icono: ICONO.ok, titulo: "Todos los presentes tienen recorrido", grande: false });
+}
+
+function antiguedad(desde) {
+  if (!desde) return "No pudimos traer la lista.";
+  const min = Math.floor((Date.now() - desde) / 60000);
+  return min < 1 ? "La lista es de hace menos de un minuto." : min === 1 ? "La lista es de hace 1 min." : `La lista es de hace ${min} min.`;
+}
+
+/* Una tarjeta de presente (pieza FilaPresente del diseño). */
+function tarjeta(p, mio) {
+  const insignia = p.sin_codigo
+    ? `<span class="mr-insignia mr-categoria mr-categoria--sin-codigo">Alta sin código</span>`
+    : CATEGORIA_INSIGNIA[p.categoria]
+      ? `<span class="mr-insignia mr-categoria mr-categoria--${CATEGORIA_INSIGNIA[p.categoria][0]}">${CATEGORIA_INSIGNIA[p.categoria][1]}</span>` : "";
+  const pedido = p.recorrido.filter(r => r.tomo_pedido).map(r => r.id === eq.yo.id ? "vos" : corto(r.nombre));
+  const meta = `<b>${escH(hora(p.llegada))}</b><span>· ${escH(personas(p.cantidad))}</span>`
+    + (p.zona ? `<span>· ${escH(p.zona)}</span>` : "") + insignia
+    + (pedido.length ? `<span class="mr-insignia mr-insignia--violeta">Pedido: ${escH(enumerar(pedido))}</span>` : "");
+  const quienes = p.recorrido.filter(r => r.id !== eq.yo.id).map(r => corto(r.nombre)).concat(mio ? ["vos"] : []);
+  const atiende = quienes.length
+    ? `<p class="mr-atiende mr-atiende--recorrido">Recorrido: <b>${escH(enumerar(quienes))}</b></p>`
+    : p.vendedor ? `<p class="mr-atiende">Lo atiende <b>${escH(p.vendedor)}</b>, su vendedor</p>`
+      : `<p class="mr-atiende">Sin vendedor asignado</p>`;
+  const boton = mio
+    ? `<button class="mr-boton mr-boton--secundario" type="button" data-bajar="${escH(p.visita_id)}">Me bajo</button>`
+    : `<button class="mr-boton mr-boton--anotarme" type="button" data-anotar="${escH(p.visita_id)}">Me anoto</button>`;
+  const yoTome = mio && p.recorrido.some(r => r.id === eq.yo.id && r.tomo_pedido);
+  return `<article class="mr-presente${mio ? " mr-presente--mio" : ""}" data-visita="${escH(p.visita_id)}"><div class="mr-presente-meta">${meta}</div>`
+    + `<h3 class="mr-presente-razon">${escH(p.razon_social)}</h3>`
+    + `<div class="mr-presente-pie">${atiende}${boton}</div>`
+    // decidido el 07/10: solo si alguien del equipo (no el vendedor) tomó el pedido
+    + (mio ? `<label class="mr-interruptor"><input type="checkbox" data-pedido="${escH(p.visita_id)}"${yoTome ? " checked" : ""}> Tomé el pedido</label>` : "")
+    + `</article>`;
+}
+
+/* Me anoto / Me bajo / Tomé el pedido. Todo pasa por la cola, en orden:
+   primero queda guardado en el celular (si se cierra la app no se pierde),
+   se ve en el acto y sale enseguida; sin señal, sale cuando vuelve. Lo último
+   que se tocó en una visita es lo que vale. */
+function accionEquipo(fn, visita, tomo) {
+  const args = { p_equipo: eq.yo.id, p_visita: visita };   // la clave se pone al enviar (conClaves)
+  if (fn === "expo_tome_pedido") args.p_tomo = !!tomo;
+  const misma = fn === "expo_tome_pedido" ? ["expo_tome_pedido"] : ["expo_anotarme", "expo_bajarme"];
+  descartarPendientes(i => misma.includes(i.fn) && i.args.p_equipo === args.p_equipo && i.args.p_visita === visita);
+  const id = encolar(fn, args);
+  const { vista } = eq;
+  alSalir(id, vista, (r, error) => {
+    if (error) { eq.tostada = null; eq.aviso = mensajeDe(error); }
+    cargarPresentes(vista);   // lo que quedó de verdad en la base
+  });
+  eq.aviso = "";
+  mostrarTostada(fn, visita);
+  repintarPresentes();
+  procesarCola();
+}
+
+/* "Te anotaste con Libreria Papeltec · Deshacer", unos segundos. */
+function mostrarTostada(fn, visita) {
+  if (fn === "expo_bajarme") eq.tostada = null;
+  if (fn !== "expo_anotarme") return;
+  const p = eq.datos && (eq.datos.presentes || []).find(x => x.visita_id === visita);
+  if (!p) return;
+  const tostada = eq.tostada = { texto: "Te anotaste con " + nombreDelLocal(p.razon_social), visita };
+  setTimeout(() => { if (eq && eq.tostada === tostada) { eq.tostada = null; repintarPresentes(); } }, TOSTADA_MS);
+}
+
+/* ==========================================================================
+   NAVEGACIÓN
+   ========================================================================== */
+/* Nunca se acepta un token de sesión pegado en la URL: se borra sin leerlo. */
+const PROHIBIDOS = ["access_token", "refresh_token", "provider_token", "id_token"];
+
+function leerRuta() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (PROHIBIDOS.some(k => p.has(k))) {
+    history.replaceState(null, "", location.pathname + location.search);
+    return {};
+  }
+  return Object.fromEntries(p);
+}
+
+function navegar() {
+  const r = leerRuta();
+  if ("cartel" in r) {
+    claveDelLink(r.cartel, CLAVE_CARTEL, "#buscar");   // el QR del cartel
+    return pantallaBuscar();
+  }
+  if ("t" in r) return abrirCliente(r.t);
+  if ("buscar" in r) return pantallaBuscar();
+  if ("alta" in r) return pantallaAlta();
+  if ("equipo" in r) {
+    claveDelLink(r.equipo, CLAVE_EQUIPO, "#recorrido");   // el link del equipo de recorrido
+    return pantallaRecorrido();
+  }
+  if ("recorrido" in r) return pantallaRecorrido();
+  return claveCartel() ? pantallaBuscar() : claveEquipo() ? pantallaRecorrido() : pantallaInvalido();
+}
+
+window.addEventListener("hashchange", navegar);
+navegar();
+procesarCola();
+
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  navigator.serviceWorker.register("sw.js").catch(() => { /* sin SW la app anda igual con señal */ });
+}
+</script>
+</body>
+</html>
