@@ -587,3 +587,39 @@ test('320 px · la hoja con un nombre largo: la × no se achica ni se va, y el C
   assert.equal(cuit, 1, 'el CUIT se parte en dos renglones');
   await cerrar(page);
 });
+
+test(`${ESCRITORIO} px · en la compu, sin datos para mostrar, la portada de marca: entrar con Google y "No hay una expo abierta" (con Salir)`, async () => {
+  let { page } = await abrir({ ancho: ESCRITORIO, hash: '#recepcion' });
+  await page.waitForSelector('.portada-recepcion');
+  assert.equal(await page.textContent('.portada-nombre'), 'Mooving' + 'Recepción');
+  assert.ok(await page.$('.portada-recepcion #google'), 'el botón de Google no está en la portada');
+  await cerrar(page);
+
+  ({ page } = await abrirRecepcion({ ancho: ESCRITORIO, rpc: { expo_recepcion: () => ({ estado: 'sin_edicion', hoy: hoy() }) } }));
+  await page.waitForSelector('.portada-recepcion');
+  assert.match(await texto(page), /No hay una expo abierta/);
+  assert.equal(await page.isVisible('.pie-salir'), false, 'quedan dos "Salir"');
+  await page.click('[data-salir]');
+  await page.waitForSelector('#google');
+  assert.equal(await page.evaluate(() => localStorage.getItem('expoSesion')), null);
+  await cerrar(page);
+});
+
+test(`${CELULAR} px · en el celular, sin datos, el estado de siempre (sin portada)`, async () => {
+  const { page } = await abrirRecepcion({ ancho: CELULAR, rpc: { expo_recepcion: () => ({ estado: 'sin_edicion', hoy: hoy() }) } });
+  await page.waitForSelector('text=No hay una expo abierta');
+  assert.equal(await page.$('.portada-recepcion'), null);
+  assert.equal(await page.isVisible('.pie-salir'), true);
+  await cerrar(page);
+});
+
+for (const ancho of [768, 1024, ESCRITORIO]) {
+  test(`${ancho} px · la portada: nada se corta`, async () => {
+    for (const op of [{ hash: '#recepcion' }, { hash: '#recepcion', local: conSesion, rpc: { expo_recepcion: () => tablero({ es_dia: false, dias: [dia(2), dia(3)] }) } }]) {
+      const { page } = await abrir({ ancho, alto: 700, ...op });
+      await page.waitForSelector('.portada-recepcion');
+      assert.deepEqual(await desbordes(page), []);
+      await cerrar(page);
+    }
+  });
+}

@@ -196,6 +196,7 @@ export function desbordes(page) {
     const fuera = [];
     if (document.documentElement.scrollWidth > ancho) fuera.push(`la página scrollea de costado (${document.documentElement.scrollWidth} > ${ancho})`);
     for (const el of document.querySelectorAll('#app *')) {
+      if (el.closest('svg') && el.tagName.toLowerCase() !== 'svg') continue;   // lo de adentro de un dibujo lo recorta el dibujo: se mide el svg
       const r = el.getBoundingClientRect();
       if (r.width && (r.right > ancho + 0.5 || r.left < -0.5)) fuera.push(`${el.tagName.toLowerCase()}.${el.className} (${Math.round(r.left)}–${Math.round(r.right)})`);
     }

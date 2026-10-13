@@ -371,6 +371,26 @@ dialog.velo::backdrop { background: rgba(23, 20, 29, .4); }
 .mr-hoja-cerrar { flex: none; }
 .mr-hoja-cabeza > div { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 480px) { .mr-ficha { grid-template-columns: 1fr; gap: 0; } .mr-ficha dd + dt { margin-top: 6px; } }
+/* Recepción en la compu, sin datos para mostrar (entrar, sin acceso, sin expo,
+   antes de abrir): la Portada del diseño a pantalla partida. Los colores, la
+   tipografía y la composición (losa violeta, dos bloques y la doble O del
+   logo) son los de la Portada de diseno/mooving-recepcion.html. */
+.portada-recepcion { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--esp-6); min-height: max(480px, calc(100dvh - 120px)); }
+.portada-texto { display: flex; flex-direction: column; justify-content: center; gap: var(--esp-6); padding: var(--esp-6) 0; max-width: 480px; }
+.portada-marca { display: flex; flex-direction: column; gap: var(--esp-4); }
+.portada-nombre { font-family: var(--font-serif); font-size: clamp(64px, 7vw, 96px); line-height: .92; font-weight: 400; letter-spacing: -0.02em; color: var(--tinta); }
+.portada-lema { font-size: 14px; line-height: 20px; color: var(--tinta-2); }
+.portada-mensaje { display: flex; flex-direction: column; gap: var(--esp-3); }
+.portada-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-3); }
+.portada-acciones .mr-boton { width: auto; padding: 0 28px; }
+.portada-lienzo { display: block; width: 100%; height: 100%; border-radius: var(--radio-grande); overflow: hidden; }
+.lienzo-vio { fill: var(--violeta); }
+.lienzo-tin { fill: var(--tinta); }
+.lienzo-sua { fill: var(--violeta-suave); }
+.lienzo-am { fill: none; stroke: var(--marca-amarillo); stroke-width: 16px; }
+.lienzo-ce { fill: none; stroke: var(--marca-celeste); stroke-width: 16px; }
+/* en la portada, "Salir" va con el mensaje: el de abajo sobra */
+.mr-pantalla:has(.portada-recepcion) .pie-salir { display: none; }
 </style>
 </head>
 <body>
@@ -1834,17 +1854,41 @@ function siEsDeSesion(e) {
   return true;
 }
 
-/* ---------- pantallas de entrada (no están dibujadas: piezas del diseño) ---------- */
+/* ---------- la portada (compu, sin datos) ---------- */
+/* La composición de la Portada del diseño, adaptada a un panel alto: la losa
+   violeta sangra arriba y abajo, los dos bloques van a la derecha y la doble O
+   del logo (amarillo y celeste) cruza el borde de la losa. */
+const LIENZO = `<svg class="portada-lienzo" viewBox="0 0 480 560" preserveAspectRatio="xMinYMid slice" aria-hidden="true">`
+  + `<rect class="lienzo-vio" x="136" y="-20" width="200" height="600" rx="18"/>`
+  + `<rect class="lienzo-tin" x="352" y="-20" width="164" height="300" rx="18"/>`
+  + `<rect class="lienzo-sua" x="352" y="296" width="164" height="284" rx="18"/>`
+  + `<circle class="lienzo-am" cx="72" cy="372" r="56"/><circle class="lienzo-ce" cx="176" cy="372" r="56"/></svg>`;
+
+/* titulo y textos ya vienen escapados; aviso, extra y acciones son marcado. */
+function portada({ titulo, textos = "", aviso: arriba = "", extra = "", acciones = "" }) {
+  return `<div class="portada-recepcion"><div class="portada-texto">`
+    + `<div class="portada-marca"><h1 class="portada-nombre">Mooving<br>Recepción</h1>`
+    + `<p class="portada-lema">La expo, sin nadie anotando en la puerta.</p></div>`
+    + `<div class="portada-mensaje">${arriba}<h2 class="mr-titulo">${titulo}</h2>${textos}</div>`
+    + extra
+    + (acciones ? `<div class="portada-acciones">${acciones}</div>` : "")
+    + `</div>${LIENZO}</div>`;
+}
+
+/* ---------- pantallas de entrada (no están dibujadas: piezas del diseño;
+   en la compu, la portada) ---------- */
 function pantallaLogin(mensaje = "") {
-  const vista = pintar(pantalla({
-    datos: ["Recepción"],
-    cuerpo: (mensaje ? aviso({ tipo: "error", icono: ICONO.atencion, titulo: "No se pudo entrar", texto: escH(mensaje), textoChico: true }) : "")
-      + estado({
-        icono: ICONO.personas, titulo: "Recepción de la expo", grande: false,
-        textos: `<p class="mr-chico">Entrá con tu cuenta de Google de Mooving, la misma de la app de pedidos.</p>`,
-      }),
-    barra: `<button class="mr-boton mr-boton--principal" type="button" id="google">Entrar con Google</button>`,
-  }));
+  const error = mensaje ? aviso({ tipo: "error", icono: ICONO.atencion, titulo: "No se pudo entrar", texto: escH(mensaje), textoChico: true }) : "";
+  const boton = `<button class="mr-boton mr-boton--principal" type="button" id="google">Entrar con Google</button>`;
+  const texto = `<p class="mr-chico">Entrá con tu cuenta de Google de Mooving, la misma de la app de pedidos.</p>`;
+  const vista = pintar(mqAncha.matches
+    ? pantalla({ datos: ["Recepción"], ancha: true, arriba: false, cuerpo: portada({ titulo: "Entrá con tu cuenta de Google",
+      textos: `<p class="mr-chico">La misma de la app de pedidos.</p>`, aviso: error, acciones: boton }) })
+    : pantalla({
+      datos: ["Recepción"],
+      cuerpo: error + estado({ icono: ICONO.personas, titulo: "Recepción de la expo", grande: false, textos: texto }),
+      barra: boton,
+    }));
   $("#google").onclick = () => entrarConGoogle($("#google"));
   return vista;
 }
@@ -1853,14 +1897,16 @@ function pantallaSinAcceso() {
   const s = sesion();
   rec = null;
   cerrarHojas();
-  const vista = pintar(pantalla({
-    datos: ["Recepción"],
-    cuerpo: estado({
-      tipo: "error", icono: ICONO.invalido, titulo: "Tu cuenta no tiene acceso a recepción", grande: false,
-      textos: `<p class="mr-chico">Entraste como <b style="color:var(--tinta);overflow-wrap:anywhere">${escH(s ? s.email : "")}</b>. Pedile a quien administra la app de pedidos que te sume como admin.</p>`,
-    }),
-    barra: `<button class="mr-boton mr-boton--secundario mr-boton--ancho" type="button" id="otra">Entrar con otra cuenta</button>`,
-  }));
+  const titulo = "Tu cuenta no tiene acceso a recepción";
+  const texto = `<p class="mr-chico">Entraste como <b style="color:var(--tinta);overflow-wrap:anywhere">${escH(s ? s.email : "")}</b>. Pedile a quien administra la app de pedidos que te sume como admin.</p>`;
+  const boton = `<button class="mr-boton mr-boton--secundario mr-boton--ancho" type="button" id="otra">Entrar con otra cuenta</button>`;
+  const vista = pintar(mqAncha.matches
+    ? pantalla({ datos: ["Recepción"], ancha: true, arriba: false, cuerpo: portada({ titulo, textos: texto, acciones: boton }) })
+    : pantalla({
+      datos: ["Recepción"],
+      cuerpo: estado({ tipo: "error", icono: ICONO.invalido, titulo, grande: false, textos: texto }),
+      barra: boton,
+    }));
   $("#otra").onclick = () => salir();
   return vista;
 }
@@ -1943,7 +1989,7 @@ function pintarRecepcion() {
   const ancha = mqAncha.matches;
   rec.vista = pintar(pantalla({
     datos: ["Recepción", ""], ancha, arriba: false, cuerpo: "",
-    extra: `<div style="padding:0 var(--esp-4) var(--esp-6);text-align:center"><button class="mr-boton mr-boton--texto" type="button" id="salir">Salir</button></div>`,
+    extra: `<div class="pie-salir" style="padding:0 var(--esp-4) var(--esp-6);text-align:center"><button class="mr-boton mr-boton--texto" type="button" id="salir">Salir</button></div>`,
   }));
   rec.ancha = ancha;
   $("#salir").onclick = () => salir();
@@ -1963,6 +2009,7 @@ function tocarEnRecepcion(e) {
   if (!b) return;
   if (b.dataset.ver) { rec.abiertos.add(b.dataset.ver); return repintarRecepcion(); }
   if (b.dataset.vincular) return abrirVincular(b.dataset.vincular);
+  if ("salir" in b.dataset) return salir();   // el de la portada
 }
 
 /* Cabecera y cuerpo con lo que hay ahora (solo cambia lo que cambió: el
@@ -2016,12 +2063,18 @@ function cuerpoRecepcion(d, ancha, ahora, antesDeAbrir) {
       texto: (rec.vistoEn ? `Mostramos lo de las ${escH(hora(rec.vistoEn))}. ` : "") + `Reintentamos cada ${REFRESCO_RECEPCION_MS / 1000} s.` })
     : "";
   if (!d) return { html: fallo || `<span class="mr-girando" role="status" aria-label="Cargando" style="align-self:center;margin-top:var(--esp-6)"></span>` };
+  // sin datos para mostrar: en la compu la portada; en el celular, el estado de siempre
+  const sinDatos = (m, extra = "") => ({
+    html: ancha
+      ? portada({ ...m, aviso: fallo, extra, acciones: `<button class="mr-boton mr-boton--secundario" type="button" data-salir>Salir</button>` })
+      : fallo + estado({ ...m, grande: false }) + extra,
+  });
   if (d.estado === "sin_edicion") {
-    return { html: fallo + estado({ icono: ICONO.reloj, titulo: "No hay una expo abierta", grande: false,
-      textos: `<p class="mr-chico">Cuando se cree la edición, acá se ve la recepción del día.</p>` }) };
+    return sinDatos({ icono: ICONO.reloj, titulo: "No hay una expo abierta",
+      textos: `<p class="mr-chico">Cuando se cree la edición, acá se ve la recepción del día.</p>` });
   }
-  if (!d.es_dia) return { html: fallo + hoyNoHayExpo(d) + ayer(d) };
-  if (antesDeAbrir) return { html: fallo + abreALas(d) + ayer(d) };
+  if (!d.es_dia) return sinDatos(hoyNoHayExpo(d), ayer(d));
+  if (antesDeAbrir) return sinDatos(abreALas(d), ayer(d));
 
   const previa = d.estado !== "en_curso"
     ? aviso({ tipo: "atencion", titulo: "La expo todavía figura «antes de la expo»", textoChico: true,
@@ -2142,23 +2195,23 @@ function noClientesHoy(d) {
     }).join("") + `</ul></div>`;
 }
 
-/* "Antes de abrir": lo que viene. */
+/* "Antes de abrir": lo que viene ({ icono, titulo, textos }: estado o portada). */
 function abreALas(d) {
   const primero = d.faltantes.length ? d.faltantes.filter(f => f.desde === d.faltantes[0].desde && f.hasta === d.faltantes[0].hasta) : [];
-  return estado({
-    icono: ICONO.reloj, titulo: `Abre a las ${escH(apertura(d.hora_apertura))}`, grande: false,
+  return {
+    icono: ICONO.reloj, titulo: `Abre a las ${escH(apertura(d.hora_apertura))}`,
     textos: `<p class="mr-chico"><b style="color:var(--tinta)">${cuantosClientes(d.con_turno)}</b> ${d.con_turno === 1 ? "tiene" : "tienen"} turno hoy.`
       + (primero.length ? ` El primero, de ${escH(horario(primero[0]))}: ${cuantosClientes(primero.length)}.` : "") + `</p>`,
-  });
+  };
 }
 
 function hoyNoHayExpo(d) {
   const proximo = (d.dias || []).find(x => x > d.hoy);
-  return estado({
-    icono: ICONO.reloj, titulo: "Hoy no hay expo", grande: false,
+  return {
+    icono: ICONO.reloj, titulo: "Hoy no hay expo",
     // "empieza" si todavía no hubo ningún día; "sigue" si ya hubo
     textos: `<p class="mr-chico">${proximo ? `La expo ${escH(d.anio)} ${d.dias[0] > d.hoy ? "empieza" : "sigue"} el ${escH(diaLargo(proximo))}.` : `La expo ${escH(d.anio)} ya terminó sus días.`}</p>`,
-  });
+  };
 }
 
 /* "Ayer · martes 14" con las dos cifras del último día. */
