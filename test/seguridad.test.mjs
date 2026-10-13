@@ -1,7 +1,7 @@
 // La frontera es el RLS y los permisos, no la app.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { base, como, anon, admin, rpc, uno, ADMIN, VENDEDOR, leerMigraciones, archivosMigracion } from './db.mjs';
+import { base, como, anon, admin, rpc, uno, ADMIN, VENDEDOR, leerMigraciones, archivosMigracion, BLOQUE_VERIFICACION } from './db.mjs';
 import { readFileSync } from 'node:fs';
 
 async function tablasExpo(db) {
@@ -133,11 +133,10 @@ test('las claves del equipo y del cartel no se guardan: solo su hash', async () 
 
 // El bloque de VERIFICACIÓN del final de la migración: en el SQL Editor solo
 // se ve la última consulta, así que si algo quedó abierto tiene que FRENAR.
-// (La prueba de mutación lo saca del SQL mutado, salvo cuando lo muta a él:
-// entonces se usa el del archivo de verdad.)
-const BLOQUE = /do \$verificacion\$[\s\S]*?\$verificacion\$;/;
-const VERIFICACION = (leerMigraciones().at(-1).match(BLOQUE)
-  || readFileSync(archivosMigracion().at(-1), 'utf8').match(BLOQUE))[0];
+// Es el de la última migración. (La prueba de mutación lo saca, salvo cuando
+// lo muta a él: entonces se usa el del archivo de verdad.)
+const VERIFICACION = (leerMigraciones().at(-1).match(BLOQUE_VERIFICACION)
+  || readFileSync(archivosMigracion().at(-1), 'utf8').match(BLOQUE_VERIFICACION))[0];
 
 test('la verificación de la migración frena si algo quedó abierto', async () => {
   const { db } = await base();
@@ -150,6 +149,8 @@ test('la verificación de la migración frena si algo quedó abierto', async () 
     [`grant execute on function public.expo_vincular(uuid, text) to anon`, /no son públicas: expo_vincular/],
     [`revoke execute on function public.expo_buscar(text, text) from anon, authenticated`, /le faltan funciones .*: expo_buscar/],
     [`grant execute on function public.expo__por_token(text) to authenticated`, /funciones internas: expo__por_token/],
+    // volver a correr la v01 se las saca a recepción (hay que correr después la v02)
+    [`revoke execute on function public.expo_recepcion() from authenticated`, /a recepción le faltan funciones .*: expo_recepcion/],
   ];
   for (const [sabotaje, error] of sabotajes) {
     const { db } = await base();

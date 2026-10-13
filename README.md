@@ -15,12 +15,19 @@ Todo se elige con lo que va después del `#` en la dirección (no se manda al se
 | `…/#t=<token>` | 1 · Check-in del cliente: el link de la invitación y el QR del mail |
 | `…/#cartel=<clave del cartel>` | 2 · Cartel de la entrada: guarda la clave en el celular y abre el buscador |
 | `…/#equipo=<clave del equipo>` | 3 · Equipo de recorrido: guarda la clave, pregunta "¿Quién sos?" una vez y muestra los presentes del día |
+| `…/#recepcion` | 4 · Recepción en vivo: entra con Google (solo admins, como en la app de pedidos). Las cifras del día, quién tenía turno y no llegó, y "Vincular" las altas sin código |
 
 - **Sin señal:** el registro se guarda en el celular, se deja pasar y se reintenta solo. Si se cierra la página, sigue al abrirla de nuevo. En el equipo de recorrido, cada toque ("Me anoto", "Me bajo", "Tomé el pedido") se guarda primero en el celular y sale en orden.
 - **Logo:** está en `assets/`. Para pasar al GIF animado, cambiar `LOGO` al principio del script del `index.html`.
 - **Versión:** `APP_VERSION` en el `index.html` y `VERSION` en `sw.js` van siempre iguales (un test lo controla). Si no se cambian al publicar, los celulares se quedan con la versión vieja.
 
 Para probarla en la compu: `npx serve .` y abrir `http://localhost:3000/#t=<token>`. Los tests no necesitan nada de eso.
+
+### Login de recepción (una vez)
+
+Recepción entra con Google por el flujo normal de Supabase (PKCE), con la misma cuenta que la app de pedidos. Pueden entrar los que están en la tabla `admins` (`es_admin()`); los demás ven "Tu cuenta no tiene acceso".
+
+Para que Google vuelva a esta app (y no a la de pedidos), en Supabase → **Authentication → URL Configuration → Redirect URLs** tiene que estar `https://somosmooving.github.io/recepcion-expo/**` (con los `**`: así vale también si se entra por `…/index.html`). Si no está, Supabase manda de vuelta a la URL principal del proyecto y el ingreso no se completa.
 
 ### Crear la edición (una vez por expo, antes del cartel y del link)
 
@@ -60,7 +67,8 @@ Las migraciones están en `sql/expo-migracion-vNN.sql`. Son idempotentes: se pue
 
 1. Abrí Supabase → **SQL Editor** y pegá la migración nueva entera.
 2. Necesita `public.es_admin()` de la app de pedidos. Si no está, frena con un error.
-3. El SQL Editor muestra solo el resultado de la última consulta. Por eso la sección **VERIFICACIÓN** controla todo (RLS prendido, el anónimo sin tablas y solo con sus funciones, nadie con las internas) y, si algo no da, **frena con un error que empieza con `VERIFICACIÓN:`** y no queda nada aplicado. Si pasa, se ve una sola fila: `listo: expo v01 verificada`, `tablas_con_rls = 10`, `funciones_del_anonimo = 11`.
+3. El SQL Editor muestra solo el resultado de la última consulta. Por eso la sección **VERIFICACIÓN** controla todo (RLS prendido, el anónimo sin tablas y solo con sus funciones, nadie con las internas) y, si algo no da, **frena con un error que empieza con `VERIFICACIÓN:`** y no queda nada aplicado. Si pasa, se ve una sola fila: `listo: expo vNN verificada`, `tablas_con_rls = 10`, `funciones_del_anonimo = 11`.
+   Se corren en orden: `v01` y después `v02` (la v02 frena si falta la v01). Si se vuelve a correr una vieja, hay que correr después las siguientes: la v01 les saca el permiso a las funciones de recepción de la v02 (la verificación de la v02 lo controla).
 4. **Siempre se corre el SQL antes de publicar el `index.html`.**
 
 Quién puede hacer qué:
@@ -70,7 +78,7 @@ Quién puede hacer qué:
 | Cliente | link con su token (QR) | ver su pantalla, confirmar, registrar, corregir la cantidad |
 | Cartel de la entrada | clave del QR impreso | buscar (≥ 3 letras, máx. 8) y alta rápida (con freno) |
 | Equipo de recorrido | link con la clave del equipo | ver presentes del día, "Me anoto" / "Me bajo", "Tomé el pedido" |
-| Recepción | usuario de Supabase con `es_admin()` | todo, por RLS; vincular altas; cambiar las claves |
+| Recepción | Google (usuario de Supabase con `es_admin()`) | todo, por RLS; el tablero del día (`expo_recepcion`); vincular altas (`expo_buscar_cliente`, `expo_vincular`, `expo_marcar_alta`); cambiar las claves |
 
 El anónimo no lee ni escribe ninguna tabla: solo llama funciones.
 

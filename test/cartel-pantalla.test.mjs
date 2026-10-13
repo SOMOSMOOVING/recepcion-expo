@@ -167,7 +167,7 @@ test(`${ANCHO} px · alta rápida que la base rechaza (tope del día): lo dice y
 
 test(`${ANCHO} px · alta rápida que vuelve a la señal justo con el tope por minuto: se reintenta, no se pierde`, async () => {
   let respuesta = SIN_RED;
-  const { page, llamadas } = await abrir({
+  const { page } = await abrir({
     ancho: ANCHO, hash: '#alta', local: { expoCartel: CLAVE_CARTEL },
     rpc: { expo_alta_rapida: (a) => (typeof respuesta === 'function' ? respuesta(a) : respuesta) },
   });

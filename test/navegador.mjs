@@ -78,14 +78,18 @@ export function previa(extra = {}) {
 
 /* Abre la app al ancho indicado (obligatorio: el nombre del test lo dice).
    rpc: { nombreFuncion: (args, n) => respuesta | SIN_RED | { error: 'expo_...' } | { http: 404 } }
-   reloj: true para adelantar el tiempo desde el test (lo que se actualiza solo).
+   reloj: true para adelantar el tiempo desde el test (lo que se actualiza solo);
+   una fecha, para arrancar en ese momento (por ejemplo, hoy a las 10:42).
+   auth: { 'token?grant_type=pkce': (cuerpo) => respuesta, ... } responde la
+   autenticación de Supabase (el login de recepción); authorize(url) responde
+   el "Entrar con Google" (devuelve a dónde vuelve).
    sw: true deja andar el service worker (se abre en localhost: lo necesita).
    almacenamiento: 'lleno' (no deja guardar) o 'bloqueado' (ni leer: el
    navegador de algunos lectores de QR).
    antes(page): corre en el mismo sitio antes de abrir la app (por ejemplo,
    para dejar cachés de otra app).
    Devuelve la página y las llamadas que hizo ({ fn, args }). */
-export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = null, oscuro = false, reloj = false, sw = false, antes = null, almacenamiento = null } = {}) {
+export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = null, oscuro = false, reloj = false, sw = false, antes = null, almacenamiento = null, auth = {}, authorize = null } = {}) {
   if (!ancho) throw new Error("abrir(): falta el ancho (cada test dice a qué ancho mira)");
   await arrancar();
   const contexto = await navegador.newContext({
@@ -95,7 +99,7 @@ export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = nu
     timezoneId: 'America/Argentina/Buenos_Aires',
     colorScheme: oscuro ? 'dark' : 'light',
   });
-  if (reloj) await contexto.clock.install();   // el test maneja el tiempo (page.clock.fastForward)
+  if (reloj) await contexto.clock.install(reloj === true ? {} : { time: reloj });   // el test maneja el tiempo (page.clock.fastForward)
   const llamadas = [];
   const veces = {};
   await contexto.route('https://fonts.googleapis.com/**', (r) => r.abort());
@@ -103,7 +107,8 @@ export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = nu
   await contexto.route('**/rest/v1/rpc/**', async (ruta) => {
     const fn = ruta.request().url().split('/rpc/')[1];
     const args = JSON.parse(ruta.request().postData() || '{}');
-    llamadas.push({ fn, args });
+    const autorizacion = ruta.request().headers().authorization;
+    llamadas.push(autorizacion ? { fn, args, auth: autorizacion } : { fn, args });
     veces[fn] = (veces[fn] || 0) + 1;
     const manejador = rpc[fn];
     const respuesta = manejador ? await manejador(args, veces[fn]) : { error: 'sin_manejador_' + fn };
@@ -115,6 +120,22 @@ export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = nu
       return ruta.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ code: 'P0001', message: respuesta.error }) });
     }
     return ruta.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(respuesta) });
+  });
+  await contexto.route('**/auth/v1/**', async (ruta) => {
+    const pedido = ruta.request(), url = new URL(pedido.url());
+    const que = url.pathname.split('/auth/v1/')[1] + url.search;
+    if (que.startsWith('authorize')) {
+      llamadas.push({ fn: 'auth:authorize', url: url.toString() });
+      const destino = authorize ? await authorize(url) : null;
+      return destino ? ruta.fulfill({ status: 302, headers: { location: destino } }) : ruta.abort();
+    }
+    const cuerpo = JSON.parse(pedido.postData() || '{}');
+    const autorizacion = pedido.headers().authorization;
+    llamadas.push(autorizacion ? { fn: 'auth:' + que, args: cuerpo, auth: autorizacion } : { fn: 'auth:' + que, args: cuerpo });
+    const r = auth[que] ? await auth[que](cuerpo) : { http: 400, error: 'sin_manejador' };
+    if (r === SIN_RED) return ruta.abort('internetdisconnected');
+    if (r && r.http) return ruta.fulfill({ status: r.http, contentType: 'application/json', body: JSON.stringify({ error: r.error || 'invalid_grant' }) });
+    return ruta.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(r) });
   });
   if (almacenamiento) {
     await contexto.addInitScript((modo) => {

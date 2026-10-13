@@ -359,6 +359,18 @@ html, body { margin: 0; background: var(--fondo); }
 #app [tabindex="-1"]:focus { outline: none; }
 /* el buscador ya tiene su × (mr-buscador-limpiar): sin la del navegador */
 .mr-buscador input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+/* la hoja de "Vincular un alta" va encima de la recepción, en un <dialog>
+   (el velo del diseño es solo el de la vista previa) */
+dialog.velo { padding: 0; border: 0; background: transparent; width: min(660px, calc(100% - 32px)); max-width: none; max-height: calc(100dvh - 32px); overflow: auto; }
+dialog.velo::backdrop { background: rgba(23, 20, 29, .4); }
+/* la hoja está dibujada para escritorio: en el celular "Coincide el CUIT" va
+   abajo de la razón social (al costado la partía a mitad de palabra) */
+@media (max-width: 480px) { .mr-opciones-vinculo .mr-insignia { grid-column: 2; justify-self: start; } }
+/* la × no se achica ni se va de la hoja con un nombre largo; en el celular
+   la ficha va en una columna (el CUIT no se parte) */
+.mr-hoja-cerrar { flex: none; }
+.mr-hoja-cabeza > div { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .mr-ficha { grid-template-columns: 1fr; gap: 0; } .mr-ficha dd + dt { margin-top: 6px; } }
 </style>
 </head>
 <body>
@@ -369,7 +381,7 @@ html, body { margin: 0; background: var(--fondo); }
 /* ==========================================================================
    Recepción Expo Mooving — un solo archivo, sin build ni librerías.
    Pantallas: 1 · check-in del cliente (#t=TOKEN)  ·  2 · cartel (#cartel=CLAVE)
-              3 · equipo de recorrido (#equipo=CLAVE)
+              3 · equipo de recorrido (#equipo=CLAVE)  ·  4 · recepción (#recepcion)
    El diseño (clases mr-, textos) está en diseno/mooving-recepcion.html.
 
    Reglas que no se negocian:
@@ -380,7 +392,7 @@ html, body { margin: 0; background: var(--fondo); }
      se reintenta solo.
    ========================================================================== */
 
-const APP_VERSION = "v1";
+const APP_VERSION = "v2";
 const SB_URL = "https://qjnvkfumrjytfhqlxuga.supabase.co";
 const SB_KEY = "sb_publishable_5HSe7XqWzr-DpEIh1FP37A_Xzo0aMfk";
 
@@ -459,7 +471,7 @@ const fmtHora = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-d
 const fmtHoyAR = new Intl.DateTimeFormat("en-CA", { timeZone: TZ });
 const capital = s => s.charAt(0).toUpperCase() + s.slice(1);
 const diaLargo = iso => fmtDiaSemana.format(fechaDe(iso)) + " " + fechaDe(iso).getUTCDate();   // "miércoles 15"
-const hora = ts => fmtHora.format(new Date(ts));                                              // "10:42"
+const hora = ts => fmtHora.format(new Date(ts)).replace(/^0(?=\d:)/, "");                     // "10:42", "8:41"
 const hoyAR = () => fmtHoyAR.format(new Date());   // del celular: para el cartel y para lo guardado sin señal
 const diasEntre = (a, b) => Math.round((fechaDe(b) - fechaDe(a)) / 86400000);
 function horaCorta(t) {             // "10:00:00" → "10", "10:30:00" → "10:30"
@@ -472,21 +484,25 @@ const apertura = t => { const [h, m] = String(t).split(":"); return Number(h) + 
 /* ====== red: funciones RPC de Supabase ======
    ErrorRed: no hubo respuesta (sin señal, tiempo agotado, servidor caído), la
    base dijo "ahora no, probá en un rato", o hay un problema de configuración
-   (404, 401, 403) → se reintenta.
-   ErrorServidor: la base contestó que no (expo_...) → reintentar no lo arregla. */
+   (404, 403, o 401 sin sesión) → se reintenta.
+   ErrorServidor: la base contestó que no (expo_...) → reintentar no lo arregla.
+   ErrorSesion: recepción, la sesión ya no sirve (401 con sesión) → a entrar de nuevo. */
 class ErrorRed extends Error {}
 class ErrorServidor extends Error {}
+class ErrorSesion extends Error {}   // recepción: sin sesión, o la sesión ya no sirve
 const PASAJEROS = new Set(["expo_demasiadas_altas_minuto"]);
 
-async function rpc(fn, args) {
+/* POST a Supabase con tope de tiempo: sin respuesta a tiempo, servidor caído
+   o "probá en un rato" (5xx, 408, 429) es ErrorRed. Lo usan rpc() y auth(). */
+async function postSupabase(ruta, cuerpo, token = null) {
   const ctrl = new AbortController();
   const tope = setTimeout(() => ctrl.abort(), ESPERA_RED_MS);
   let r;
   try {
-    r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+    r = await fetch(`${SB_URL}/${ruta}`, {
       method: "POST",
-      headers: { apikey: SB_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify(args),
+      headers: { apikey: SB_KEY, "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) },
+      body: JSON.stringify(cuerpo),
       signal: ctrl.signal,
     });
   } catch (e) {
@@ -495,6 +511,12 @@ async function rpc(fn, args) {
     clearTimeout(tope);
   }
   if (r.status >= 500 || r.status === 408 || r.status === 429) throw new ErrorRed("servidor_" + r.status);
+  return r;
+}
+
+async function rpc(fn, args, token = null) {
+  const r = await postSupabase(`rest/v1/rpc/${fn}`, args, token);
+  if (token && r.status === 401) throw new ErrorSesion("sesion_vencida");   // recepción: hay que renovar o volver a entrar
   let datos = null;
   try { datos = await r.json(); } catch (e) { /* respuesta vacía */ }
   if (!r.ok) {
@@ -524,6 +546,8 @@ const MENSAJES = {
   expo_no_anotado: "Para marcar el pedido, primero anotate con ese presente.",
   expo_equipo_invalido: "No figurás en el equipo activo. Pedile a recepción que te agregue.",
   expo_clave_cartel_invalida: "Este QR ya no sirve: escaneá el del cartel de la entrada.",
+  expo_alta_no_disponible: "Esta alta ya la resolvió otra persona de recepción.",
+  expo_codigo_desconocido: "Ese código no está en la copia de Finnegans.",
 };
 const mensajeDe = e => MENSAJES[e && e.message] || "Algo salió mal. Pedí ayuda en la entrada.";
 
@@ -669,10 +693,11 @@ function cabecera(datos, accion = "") {
 /* Pantalla de celular: cabecera, cuerpo y (si hay) barra de abajo.
    arriba: el check-in deja más aire arriba que el cartel (como en el diseño).
    hueco: el espacio entre bloques, si la pantalla del diseño usa otro.
+   ancha: la de escritorio (recepción).
    extra: lo que va después de la barra (el buscador repinta ahí la suya). */
-function pantalla({ datos, accion = "", cuerpo, barra = "", arriba = true, hueco = "", extra = "" }) {
+function pantalla({ datos, accion = "", cuerpo, barra = "", arriba = true, hueco = "", extra = "", ancha = false }) {
   const estilo = [arriba && "padding-top:var(--esp-6)", hueco && "gap:" + hueco].filter(Boolean).join(";");
-  return `<main class="mr-pantalla">${cabecera(datos, accion)}`
+  return `<main class="mr-pantalla${ancha ? " mr-pantalla--ancha" : ""}">${cabecera(datos, accion)}`
     + `<div class="mr-cuerpo"${estilo ? ` style="${estilo}"` : ""}>${cuerpo}</div>`
     + (barra ? `<div class="mr-barra">${barra}</div>` : "")
     + extra + `</main>`;
@@ -1666,6 +1691,614 @@ function mostrarTostada(fn, visita) {
 }
 
 /* ==========================================================================
+   4 · RECEPCIÓN EN VIVO  (#recepcion)
+   Se entra con Google, como en la app de pedidos (decidido el 08/10), por el
+   flujo normal de Supabase con PKCE: el login empieza en este navegador y
+   vuelve con un ?code= que solo sirve con el verificador que quedó guardado
+   acá. Un #access_token pegado en la URL no se acepta nunca (PROHIBIDOS).
+   Quién puede ver la recepción lo decide la base (es_admin()), no la página.
+   ========================================================================== */
+const SESION = "expoSesion";              // { email, access_token, refresh_token, vence }
+const PKCE = "expoPkce";                  // el verificador del login en curso
+const REFRESCO_RECEPCION_MS = 30000;      // "Reintentamos cada 30 s"
+const RELOJ_RECEPCION_MS = 5000;          // "Actualizado hace 10 s"
+const FALTANTES_A_LA_VISTA = 3;           // por turno; el resto, con "Ver los 4 que faltan"
+const RENOVAR_ANTES_MS = 60000;           // la sesión se renueva un minuto antes de vencer
+const mqAncha = window.matchMedia("(min-width: 760px)");   // escritorio o tablet
+
+/* ---------- login con Google (PKCE) ---------- */
+function b64url(bytes) {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+async function retoPkce(verificador) {
+  return b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verificador))));
+}
+const urlDeVuelta = () => location.origin + location.pathname;   // a donde vuelve Google (sin # ni ?)
+
+async function entrarConGoogle(boton) {
+  const verificador = b64url(crypto.getRandomValues(new Uint8Array(48)));   // 64 caracteres
+  // si el navegador no deja guardar, al volver de Google no habría con qué canjear
+  if (!guardarLocal(PKCE, verificador)) {
+    return pantallaLogin("Este navegador no deja guardar datos (¿modo privado?): así no se puede entrar.");
+  }
+  ocupar(boton, "Abriendo Google…");
+  const u = new URL(SB_URL + "/auth/v1/authorize");
+  u.searchParams.set("provider", "google");
+  u.searchParams.set("redirect_to", urlDeVuelta());
+  u.searchParams.set("code_challenge", await retoPkce(verificador));
+  u.searchParams.set("code_challenge_method", "s256");
+  u.searchParams.set("prompt", "select_account");   // en la compu compartida, que se vea con qué cuenta se entra
+  location.assign(u.toString());
+}
+
+/* Si se vuelve de Google con "Atrás", el navegador restaura la página como
+   estaba ("Abriendo Google…"): se vuelve a mostrar el botón. */
+window.addEventListener("pageshow", e => { if (e.persisted && location.hash === "#recepcion" && !sesion()) pantallaLogin(); });
+
+/* Llamada a la autenticación de Supabase (con el mismo tope que rpc(): una
+   renovación colgada no puede frenar la recepción). */
+async function auth(ruta, cuerpo) {
+  const r = await postSupabase(`auth/v1/${ruta}`, cuerpo);
+  let d = null;
+  try { d = await r.json(); } catch (e) { /* vacía */ }
+  if (!r.ok || !d || !d.access_token) throw new ErrorSesion((d && (d.error_code || d.error)) || "error_" + r.status);
+  return d;
+}
+
+function guardarSesion(d, email) {
+  const mail = (d.user && d.user.email) || email;
+  if (!mail) throw new ErrorSesion("sin_mail");
+  const s = { email: mail, access_token: d.access_token, refresh_token: d.refresh_token || "", vence: Date.now() + Number(d.expires_in || 3600) * 1000 };
+  guardarLocal(SESION, s);
+  return s;
+}
+const sesion = () => { const s = leerLocal(SESION); return s && s.access_token ? s : null; };
+
+/* Vuelve de Google con ?code= (o ?error=). Se canjea solo si este navegador
+   empezó el login: un link con el code de otro no sirve sin el verificador. */
+async function volverDeGoogle() {
+  const q = new URLSearchParams(location.search);
+  const verificador = leerLocal(PKCE);
+  borrarLocal(PKCE);
+  history.replaceState(null, "", location.pathname + "#recepcion");   // el code no queda en la URL ni en el historial
+  if (q.has("error") || q.has("error_description")) return pantallaLogin("Google no completó el ingreso. Probá de nuevo.");
+  if (typeof verificador !== "string" || !q.get("code")) return pantallaLogin();
+  cargando();
+  try {
+    guardarSesion(await auth("token?grant_type=pkce", { auth_code: q.get("code"), code_verifier: verificador }));
+  } catch (e) {
+    return pantallaLogin(e instanceof ErrorRed ? "Sin conexión: para entrar hace falta internet." : "No se pudo completar el ingreso. Probá de nuevo.");
+  }
+  abrirRecepcion();
+}
+
+/* El token de la sesión, renovado si está por vencer (una sola renovación a
+   la vez: Supabase cambia el refresh_token en cada una). Si mientras tanto
+   tocaron "Salir" (o entró otra cuenta), lo renovado no se guarda: se cierra. */
+let renovando = null;
+async function tokenValido(forzar = false) {
+  const s = sesion();
+  if (!s) throw new ErrorSesion("sin_sesion");
+  if (!forzar && Date.now() < s.vence - RENOVAR_ANTES_MS) return s.access_token;
+  if (!s.refresh_token) throw new ErrorSesion("sin_refresh");
+  renovando = renovando || auth("token?grant_type=refresh_token", { refresh_token: s.refresh_token })
+    .then(d => {
+      const ahora = sesion();
+      // si otra pestaña de la misma cuenta renovó a la vez, las dos sesiones sirven: se guarda esta
+      if (!ahora || ahora.email !== s.email) {
+        cerrarEnSupabase(d.access_token);
+        throw new ErrorSesion("sesion_cerrada");
+      }
+      return guardarSesion(d, s.email);
+    })
+    .finally(() => { renovando = null; });
+  return (await renovando).access_token;
+}
+
+/* RPC de recepción: con la sesión. Si la base dice que venció antes de
+   tiempo (el reloj de la compu), se renueva una vez y se reintenta. */
+async function rpcRecepcion(fn, args = {}) {
+  try {
+    return await rpc(fn, args, await tokenValido());
+  } catch (e) {
+    if (!(e instanceof ErrorSesion) || e.message !== "sesion_vencida") throw e;
+    return rpc(fn, args, await tokenValido(true));
+  }
+}
+
+/* Cierra en Supabase solo esta sesión (scope=local): la misma cuenta sigue
+   entrada en la app de pedidos y en otras compus. */
+function cerrarEnSupabase(token) {
+  fetch(`${SB_URL}/auth/v1/logout?scope=local`, { method: "POST", headers: { apikey: SB_KEY, Authorization: "Bearer " + token } }).catch(() => {});
+}
+
+/* Las hojas (<dialog>) están fuera de #app: al cambiar de pantalla por la
+   sesión no pueden quedar abiertas encima, con los datos de un cliente. */
+const cerrarHojas = () => document.querySelectorAll("dialog").forEach(d => d.close());
+
+function salir(mensaje = "") {
+  const s = sesion();
+  if (s) cerrarEnSupabase(s.access_token);
+  borrarLocal(SESION);
+  rec = null;   // lo último que se vio estaba solo en memoria: se va con ella
+  cerrarHojas();
+  pantallaLogin(mensaje);
+}
+
+/* La sesión ya no sirve (venció, o la cerraron): a entrar de nuevo. Lo demás sigue. */
+function siEsDeSesion(e) {
+  if (!(e instanceof ErrorSesion)) return false;
+  salir("Tu sesión venció. Entrá de nuevo.");
+  return true;
+}
+
+/* ---------- pantallas de entrada (no están dibujadas: piezas del diseño) ---------- */
+function pantallaLogin(mensaje = "") {
+  const vista = pintar(pantalla({
+    datos: ["Recepción"],
+    cuerpo: (mensaje ? aviso({ tipo: "error", icono: ICONO.atencion, titulo: "No se pudo entrar", texto: escH(mensaje), textoChico: true }) : "")
+      + estado({
+        icono: ICONO.personas, titulo: "Recepción de la expo", grande: false,
+        textos: `<p class="mr-chico">Entrá con tu cuenta de Google de Mooving, la misma de la app de pedidos.</p>`,
+      }),
+    barra: `<button class="mr-boton mr-boton--principal" type="button" id="google">Entrar con Google</button>`,
+  }));
+  $("#google").onclick = () => entrarConGoogle($("#google"));
+  return vista;
+}
+
+function pantallaSinAcceso() {
+  const s = sesion();
+  rec = null;
+  cerrarHojas();
+  const vista = pintar(pantalla({
+    datos: ["Recepción"],
+    cuerpo: estado({
+      tipo: "error", icono: ICONO.invalido, titulo: "Tu cuenta no tiene acceso a recepción", grande: false,
+      textos: `<p class="mr-chico">Entraste como <b style="color:var(--tinta);overflow-wrap:anywhere">${escH(s ? s.email : "")}</b>. Pedile a quien administra la app de pedidos que te sume como admin.</p>`,
+    }),
+    barra: `<button class="mr-boton mr-boton--secundario mr-boton--ancho" type="button" id="otra">Entrar con otra cuenta</button>`,
+  }));
+  $("#otra").onclick = () => salir();
+  return vista;
+}
+
+/* ---------- la recepción ---------- */
+/* La pantalla abierta: { vista, ancha (escritorio o celular), datos
+   (expo_recepcion), vistoEn, fallo, pedido (número del último pedido),
+   vendedor (filtro), abiertos (turnos con "Ver los que faltan" tocado) }.
+   Lo que se vio queda solo en memoria. */
+let rec = null;
+
+const fmtMinutosAR = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: TZ });
+function minutosAR(fecha = new Date()) {   // 10:42 en Argentina → 642
+  const [h, m] = fmtMinutosAR.format(fecha).split(":").map(Number);
+  return h * 60 + m;
+}
+const minutosDe = t => { const [h, m] = String(t).split(":").map(Number); return h * 60 + (m || 0); };
+const duracion = min => min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")}`;   // "1 h 42"
+const cuantosClientes = n => n === 1 ? "1 cliente" : n + " clientes";
+const fmtDecimal = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });   // "2,1"
+function hace(desde) {
+  const s = Math.max(0, Math.round((Date.now() - desde) / 1000));
+  return s < 60 ? `hace ${s} s` : `hace ${Math.floor(s / 60)} min`;
+}
+/* "27284551203" → "27-28455120-3"; lo que no es un CUIT, tal cual */
+function formatoCuit(t) {
+  const d = soloDigitos(t);
+  return d.length === LARGO_CUIT && /^[\d\s.-]+$/.test(t) ? `${d.slice(0, 2)}-${d.slice(2, 10)}-${d.slice(10)}` : String(t || "");
+}
+const DIJO_SER = {
+  cliente: "Cliente de Mooving", cliente_de_cliente: "Viene con un cliente",
+  proveedor: "Proveedor", comex: "Comex", licencia: "Agente de licencias",
+};
+const DICE = { cliente: "dice ser cliente", cliente_de_cliente: "viene con un cliente" };
+const LARGO_CUIT = 11;            // igual que expo_buscar_cliente
+const MIN_LETRAS_VINCULAR = 2;    // igual que expo_buscar_cliente
+/* Las formas societarias no sirven para buscar: "Librería Arco S.R.L." buscaría "srl". */
+const SOCIEDADES = new Set(["sa", "srl", "sas", "sh", "sc", "hnos", "ltda", "saic", "saci", "sacifi", "coop"]);
+const soloDigitos = t => String(t || "").replace(/\D/g, "");
+
+/* Lo que se busca primero al abrir la hoja: el código, si lo cargó en vez
+   del CUIT; si no, la última palabra con sentido de la empresa ("kalu"). */
+function busquedaInicial(alta) {
+  const digitos = soloDigitos(alta.cuit);
+  if (digitos && digitos.length !== LARGO_CUIT) return digitos;
+  const palabras = normalizar(alta.empresa).split(" ").filter(w => w.length >= 3 && !SOCIEDADES.has(w));
+  return palabras.pop() || normalizar(alta.empresa);
+}
+
+function abrirRecepcion() {
+  if (!sesion()) return pantallaLogin();
+  rec = { vista: 0, ancha: mqAncha.matches, datos: null, vistoEn: null, fallo: false, pedido: 0, vendedor: "", abiertos: new Set() };
+  pintarRecepcion();
+  cargarRecepcion();
+  // mientras siga esta recepción en pantalla (pasar a escritorio la repinta, pero es la misma)
+  const yo = rec, sigue = () => rec === yo && yo.vista === vistaN;
+  const datos = setInterval(() => (sigue() ? cargarRecepcion() : clearInterval(datos)), REFRESCO_RECEPCION_MS);
+  const reloj = setInterval(() => (sigue() ? repintarRecepcion() : clearInterval(reloj)), RELOJ_RECEPCION_MS);
+}
+
+async function cargarRecepcion() {
+  const yo = rec, n = ++yo.pedido;
+  // lo que llega tarde (un pedido anterior al último) no pisa lo nuevo
+  const vigente = () => rec === yo && vistaN === yo.vista && n === yo.pedido;
+  try {
+    const datos = await rpcRecepcion("expo_recepcion");
+    if (!vigente()) return;
+    Object.assign(yo, { datos, vistoEn: Date.now(), fallo: false });
+  } catch (e) {
+    if (!vigente()) return;
+    if (siEsDeSesion(e)) return;
+    if (e instanceof ErrorServidor && e.message === "expo_solo_admin") return pantallaSinAcceso();
+    yo.fallo = true;
+  }
+  repintarRecepcion();
+}
+
+/* La pantalla entera: al abrir y cuando pasa de celular a escritorio. */
+function pintarRecepcion() {
+  const ancha = mqAncha.matches;
+  rec.vista = pintar(pantalla({
+    datos: ["Recepción", ""], ancha, arriba: false, cuerpo: "",
+    extra: `<div style="padding:0 var(--esp-4) var(--esp-6);text-align:center"><button class="mr-boton mr-boton--texto" type="button" id="salir">Salir</button></div>`,
+  }));
+  rec.ancha = ancha;
+  $("#salir").onclick = () => salir();
+  // los toques del tablero se atienden acá una sola vez (se repinta seguido)
+  const cuerpo = $("#app .mr-cuerpo");
+  cuerpo.addEventListener("click", tocarEnRecepcion);
+  cuerpo.addEventListener("change", tocarEnRecepcion);
+  repintarRecepcion();
+}
+mqAncha.addEventListener("change", () => { if (rec && rec.vista === vistaN) pintarRecepcion(); });
+
+function tocarEnRecepcion(e) {
+  const t = e.target;
+  if (e.type === "change" && t.id === "vendedor") { rec.vendedor = t.value; return repintarRecepcion(); }
+  if (e.type !== "click") return;
+  const b = t.closest("button");
+  if (!b) return;
+  if (b.dataset.ver) { rec.abiertos.add(b.dataset.ver); return repintarRecepcion(); }
+  if (b.dataset.vincular) return abrirVincular(b.dataset.vincular);
+}
+
+/* Cabecera y cuerpo con lo que hay ahora (solo cambia lo que cambió: el
+   foco y el filtro quedan donde estaban). */
+function repintarRecepcion() {
+  if (!rec || rec.vista !== vistaN) return;
+  const d = rec.datos, ancha = rec.ancha;
+  const ahora = minutosAR();
+  const antesDeAbrir = d && d.es_dia && d.estado === "en_curso" && ahora < minutosDe(d.hora_apertura)
+    && !d.cifras.clientes && !d.cifras.no_clientes;
+  const [linea1, linea2] = $("#app .mr-cabecera-dato").children;
+  linea1.textContent = d && d.hoy ? cabeceraRecepcion(d, ancha) : "Recepción";
+  linea2.textContent = rec.fallo || antesDeAbrir || !rec.vistoEn ? hora(Date.now())
+    : (ancha ? "Actualizado " : "") + hace(rec.vistoEn);
+
+  const cuerpo = $("#app .mr-cuerpo");
+  const { html, hueco } = cuerpoRecepcion(d, ancha, ahora, antesDeAbrir);
+  cuerpo.style.gap = hueco || "";
+  const volverAlFoco = focoEnRecepcion();
+  cambiarSiHaceFalta(cuerpo, html);
+  volverAlFoco();
+}
+
+/* "Recepción · Miércoles 15 · día 2 de 3" (escritorio) / "Recepción · Mié 15" */
+function cabeceraRecepcion(d, ancha) {
+  if (!ancha) return "Recepción · " + diaCorto(d.hoy);
+  const i = (d.dias || []).indexOf(d.hoy);
+  return `Recepción · ${capital(diaLargo(d.hoy))}` + (i >= 0 ? ` · día ${i + 1} de ${d.dias.length}` : "");
+}
+
+/* Qué tenía el foco (el filtro, "Vincular", "Ver los que faltan") para devolvérselo. */
+function focoEnRecepcion() {
+  const a = document.activeElement;
+  const cuerpo = $("#app .mr-cuerpo");
+  if (!a || !cuerpo.contains(a)) return () => {};
+  const selector = a.id === "vendedor" ? "#vendedor"
+    : a.dataset.vincular ? `[data-vincular="${a.dataset.vincular}"]`
+    : a.dataset.ver ? `[data-ver="${a.dataset.ver}"]` : null;
+  return () => {
+    const otro = selector && cuerpo.querySelector(selector);
+    if (otro) return otro !== document.activeElement && otro.focus({ preventScroll: true });
+    // "Ver los que faltan" ya no está (se abrió el turno): el foco va al título del turno
+    const titulo = a.dataset.ver && cuerpo.querySelector(`[data-grupo="${a.dataset.ver}"] h3`);
+    if (titulo) { titulo.setAttribute("tabindex", "-1"); titulo.focus({ preventScroll: true }); }
+  };
+}
+
+function cuerpoRecepcion(d, ancha, ahora, antesDeAbrir) {
+  const fallo = rec.fallo
+    ? aviso({ tipo: "error", titulo: rec.vistoEn ? "No se pudo actualizar" : "No se pudo cargar la recepción", textoChico: true,
+      texto: (rec.vistoEn ? `Mostramos lo de las ${escH(hora(rec.vistoEn))}. ` : "") + `Reintentamos cada ${REFRESCO_RECEPCION_MS / 1000} s.` })
+    : "";
+  if (!d) return { html: fallo || `<span class="mr-girando" role="status" aria-label="Cargando" style="align-self:center;margin-top:var(--esp-6)"></span>` };
+  if (d.estado === "sin_edicion") {
+    return { html: fallo + estado({ icono: ICONO.reloj, titulo: "No hay una expo abierta", grande: false,
+      textos: `<p class="mr-chico">Cuando se cree la edición, acá se ve la recepción del día.</p>` }) };
+  }
+  if (!d.es_dia) return { html: fallo + hoyNoHayExpo(d) + ayer(d) };
+  if (antesDeAbrir) return { html: fallo + abreALas(d) + ayer(d) };
+
+  const previa = d.estado !== "en_curso"
+    ? aviso({ tipo: "atencion", titulo: "La expo todavía figura «antes de la expo»", textoChico: true,
+      texto: "Hoy es día de expo, pero el QR de los clientes sigue diciendo «Confirmo que voy». Pasá la edición a en curso." })
+    : "";
+  // el filtro por vendedor está solo en escritorio: en el celular no se ve, así que no filtra
+  const faltantes = d.faltantes.filter(f => !ancha || !rec.vendedor || f.vendedor === rec.vendedor);
+  const todosLlegaron = d.con_turno > 0 && !d.faltantes.length;
+  const listas = todosLlegaron ? llegaronTodos(d) : d.con_turno ? listaDeFaltantes(d, faltantes, ancha, ahora) : "";
+  const costado = altasSinCodigo(d) + noClientesHoy(d);
+  if (ancha) {
+    return { html: fallo + previa + cifrasRecepcion(d, true, ahora)
+      + `<div style="display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:var(--esp-6);align-items:start">`
+      + `<section style="display:flex;flex-direction:column;gap:var(--esp-4)">${listas}</section>`
+      + `<div style="display:flex;flex-direction:column;gap:var(--esp-6)">${costado}</div></div>` };
+  }
+  return { html: fallo + previa + cifrasRecepcion(d, false, ahora) + listas + costado, hueco: "var(--esp-4)" };
+}
+
+const cifra = (valor, pie, clase = "") =>
+  `<div class="mr-cifra${clase ? " " + clase : ""}"><span class="mr-cifra-valor">${valor}</span><span class="mr-cifra-pie">${pie}</span></div>`;
+
+function cifrasRecepcion(d, ancha, ahora) {
+  const c = d.cifras, con = d.con_turno, faltan = d.faltantes.length;
+  const atrasados = d.faltantes.filter(f => ahora >= minutosDe(f.hasta)).length;
+  const valorFaltan = `${faltan} <small>de ${con}</small>`;
+  const claveFaltan = faltan ? " mr-cifra--clave" : "";
+  if (ancha) {
+    return `<div class="mr-cifras">`
+      + cifra(c.clientes, "clientes llegaron" + (c.sin_turno ? ` · ${c.sin_turno} sin turno hoy` : ""))
+      + cifra(c.personas, "personas" + (c.clientes ? ` · ${fmtDecimal.format(c.personas / c.clientes)} por cliente` : ""))
+      + cifra(`${c.no_clientes} <small>· ${c.no_clientes_personas} pers.</small>`, "no clientes, fuera de las cifras")
+      + (con ? cifra(valorFaltan, faltan ? "con turno hoy todavía no llegaron" : "faltantes", claveFaltan.trim()) : "")
+      + `</div>`;
+  }
+  const pieFaltan = faltan
+    ? "con turno hoy todavía no llegaron" + (atrasados ? ` · ${atrasados === 1 ? "1 atrasado" : atrasados + " atrasados"}` : "")
+    : "faltantes";
+  return `<div class="mr-cifras mr-cifras--2">`
+    + cifra(c.clientes, "clientes") + cifra(c.personas, "personas")
+    + (con ? cifra(valorFaltan, pieFaltan, "mr-cifra--ancha" + claveFaltan) : "")
+    + `</div>`;
+}
+
+/* Los faltantes, agrupados por turno; los de más tarde, solo la cuenta. */
+function listaDeFaltantes(d, faltantes, ancha, ahora) {
+  const titulo = ancha
+    ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h2 class="mr-titulo">Tenían turno hoy y no llegaron</h2>${filtroVendedor(d)}</div>`
+    : `<h2 class="mr-subtitulo">Tenían turno hoy y no llegaron</h2>`;
+  const grupos = new Map();
+  for (const f of faltantes) {
+    const k = f.desde + "-" + f.hasta;
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(f);
+  }
+  if (!grupos.size) {
+    return titulo + estado({ icono: ICONO.lupa, titulo: `Ningún faltante de ${escH(rec.vendedor)}`, grande: false });
+  }
+  return titulo + Array.from(grupos, ([k, lista]) => grupoDeTurno(k, lista, ahora)).join("");
+}
+
+function grupoDeTurno(k, lista, ahora) {
+  const { desde, hasta } = lista[0];
+  const turno = `Turno ${horario({ desde, hasta })}`;
+  if (ahora < minutosDe(desde)) {
+    return `<div data-grupo="${escH(k)}"><div class="mr-grupo-titulo"><h3 class="mr-etiqueta">${escH(turno)} · ${lista.length}</h3><span class="mr-chico">más tarde</span></div></div>`;
+  }
+  const termino = ahora >= minutosDe(hasta);
+  const lado = termino ? `terminó hace ${duracion(ahora - minutosDe(hasta))}` : "en curso";
+  const insignia = termino
+    ? `<span class="mr-insignia mr-insignia--atencion">Atrasado ${escH(duracion(ahora - minutosDe(desde)))}</span>`
+    : `<span class="mr-insignia">En su turno</span>`;
+  const abierto = rec.abiertos.has(k) || lista.length <= FALTANTES_A_LA_VISTA;
+  const visibles = abierto ? lista : lista.slice(0, FALTANTES_A_LA_VISTA);
+  const resto = lista.length - visibles.length;
+  return `<div data-grupo="${escH(k)}"><div class="mr-grupo-titulo"><h3 class="mr-etiqueta">${escH(turno)} · faltan ${lista.length}</h3><span class="mr-chico">${escH(lado)}</span></div>`
+    + `<ul class="mr-lista">${visibles.map(f => `<li class="mr-falta"><span class="mr-falta-razon">${escH(f.razon_social)}</span>`
+      + `<span class="mr-falta-datos">${[f.localidad, f.zona, f.vendedor].filter(Boolean).map(escH).join(" · ")}</span>`
+      + `<span class="mr-falta-lado"><span class="mr-chico" style="display:block">${escH(horario(f))}</span>${insignia}</span></li>`).join("")}`
+    + (resto ? `<li class="mr-falta"><button class="mr-boton mr-boton--texto" style="padding:0" type="button" data-ver="${escH(k)}">${resto === 1 ? "Ver el que falta" : `Ver los ${resto} que faltan`}</button></li>` : "")
+    + `</ul></div>`;
+}
+
+function filtroVendedor(d) {
+  const vendedores = [...new Set(d.faltantes.map(f => f.vendedor).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+  if (rec.vendedor && !vendedores.includes(rec.vendedor)) vendedores.push(rec.vendedor);
+  return `<select class="mr-select" id="vendedor" aria-label="Vendedor"><option value="">Todos los vendedores</option>`
+    + vendedores.map(v => `<option value="${escH(v)}"${v === rec.vendedor ? " selected" : ""}>${escH(v)}</option>`).join("") + `</select>`;
+}
+
+function llegaronTodos(d) {
+  const n = d.altas.length;
+  return estado({
+    tipo: "ok", icono: ICONO.ok, titulo: "Llegaron todos los turnos de hoy", grande: false, estilo: "padding:var(--esp-6) 0",
+    textos: n ? `<p class="mr-chico">${n === 1 ? "Queda 1 alta sin código para vincular." : `Quedan ${n} altas sin código para vincular.`}</p>` : "",
+  });
+}
+
+function altasSinCodigo(d) {
+  if (!d.altas.length) return "";
+  return `<div><div class="mr-grupo-titulo"><h3 class="mr-etiqueta">Altas sin código · ${d.altas.length}</h3></div>`
+    + `<ul class="mr-lista">${d.altas.map(a => {
+      const cuando = a.llegada ? (a.dia && a.dia !== d.hoy ? diaCorto(a.dia) + ", " : "") + hora(a.llegada) : "";
+      const datos = [a.nombre, DICE[a.categoria], cuando].filter(Boolean).map(escH).join(" · ");
+      return `<li class="mr-falta"><span class="mr-falta-razon">${escH(a.empresa)}</span><span class="mr-falta-datos">${datos}</span>`
+        + `<span class="mr-falta-lado"><button class="mr-boton mr-boton--secundario" style="min-height:40px" type="button" data-vincular="${escH(a.id)}">Vincular</button></span></li>`;
+    }).join("")}</ul>`
+    + `<p class="mr-chico" style="margin-top:6px">Sin código no entran en el cruce con facturación.</p></div>`;
+}
+
+function noClientesHoy(d) {
+  if (!d.no_clientes.length) return "";
+  return `<div><div class="mr-grupo-titulo"><h3 class="mr-etiqueta">No clientes hoy</h3></div><ul class="mr-lista">`
+    + d.no_clientes.map(n => {
+      const [clase, texto] = CATEGORIA_INSIGNIA[n.categoria] || ["", "No es cliente"];
+      const insignia = `<span class="mr-insignia${clase ? ` mr-categoria mr-categoria--${clase}` : ""}">${escH(texto)}</span>`;
+      return `<li class="mr-falta"><span class="mr-falta-razon">${insignia}</span><span class="mr-falta-lado mr-cuenta">${n.cantidad} · ${n.personas} pers.</span></li>`;
+    }).join("") + `</ul></div>`;
+}
+
+/* "Antes de abrir": lo que viene. */
+function abreALas(d) {
+  const primero = d.faltantes.length ? d.faltantes.filter(f => f.desde === d.faltantes[0].desde && f.hasta === d.faltantes[0].hasta) : [];
+  return estado({
+    icono: ICONO.reloj, titulo: `Abre a las ${escH(apertura(d.hora_apertura))}`, grande: false,
+    textos: `<p class="mr-chico"><b style="color:var(--tinta)">${cuantosClientes(d.con_turno)}</b> ${d.con_turno === 1 ? "tiene" : "tienen"} turno hoy.`
+      + (primero.length ? ` El primero, de ${escH(horario(primero[0]))}: ${cuantosClientes(primero.length)}.` : "") + `</p>`,
+  });
+}
+
+function hoyNoHayExpo(d) {
+  const proximo = (d.dias || []).find(x => x > d.hoy);
+  return estado({
+    icono: ICONO.reloj, titulo: "Hoy no hay expo", grande: false,
+    // "empieza" si todavía no hubo ningún día; "sigue" si ya hubo
+    textos: `<p class="mr-chico">${proximo ? `La expo ${escH(d.anio)} ${d.dias[0] > d.hoy ? "empieza" : "sigue"} el ${escH(diaLargo(proximo))}.` : `La expo ${escH(d.anio)} ya terminó sus días.`}</p>`,
+  });
+}
+
+/* "Ayer · martes 14" con las dos cifras del último día. */
+function ayer(d) {
+  if (!d.ayer) return "";
+  const rotulo = diasEntre(d.ayer.dia, d.hoy) === 1 ? "Ayer" : "Último día";
+  return `<div class="mr-grupo-titulo"><h3 class="mr-etiqueta">${rotulo} · ${escH(diaLargo(d.ayer.dia))}</h3></div>`
+    + `<div class="mr-cifras mr-cifras--2">${cifra(d.ayer.clientes, "clientes")}${cifra(d.ayer.personas, "personas")}</div>`;
+}
+
+/* ---------- Vincular un alta ---------- */
+/* La hoja abierta: { dlg, alta, codigo (el elegido), n (última búsqueda),
+   ocupado (guardando: no se cambia ni se cierra hasta que conteste) }.
+   Todo se busca adentro de su propia hoja (v.en), nunca en la página. */
+function abrirVincular(id) {
+  const a = rec && rec.datos && rec.datos.altas.find(x => x.id === id);
+  if (!a || document.querySelector("dialog.velo")) return;
+  const cuando = (a.dia ? diaCorto(a.dia) : "") + (a.llegada ? ", " + hora(a.llegada) : "");
+  const ficha = [
+    a.nombre && ["Se registró", escH(a.nombre)],
+    ["Dijo ser", escH(DIJO_SER[a.categoria] || a.categoria)],
+    a.cuit && ["CUIT que cargó", `<span class="mr-num">${escH(formatoCuit(a.cuit))}</span>`],
+    a.cantidad && ["Vinieron", escH(personas(a.cantidad))],
+  ].filter(Boolean).map(([dt, dd]) => `<dt>${dt}</dt><dd>${dd}</dd>`).join("");
+  const inicial = busquedaInicial(a);
+
+  const dlg = document.createElement("dialog");
+  dlg.className = "velo";
+  dlg.setAttribute("aria-labelledby", "vTitulo");
+  dlg.innerHTML = `<div class="mr-hoja mr">`
+    + `<div class="mr-hoja-cabeza"><div><p class="mr-etiqueta">Alta sin código${cuando ? " · " + escH(cuando) : ""}</p>`
+    + `<h2 id="vTitulo" class="mr-titulo" style="margin-top:6px">${escH(a.empresa)}</h2></div>`
+    + `<button class="mr-hoja-cerrar" type="button" aria-label="Cerrar" data-v="cerrar">×</button></div>`
+    + `<dl class="mr-ficha">${ficha}</dl>`
+    + `<div><p class="mr-subtitulo" id="vPregunta" style="margin-bottom:12px">¿Quién es en Finnegans?</p>`
+    + `<label class="mr-buscador" style="margin-bottom:12px">${ICONO.lupa}<span class="mr-oculto">Buscar cliente</span>`
+    + `<input class="mr-entrada" type="search" data-v="buscar" autocomplete="off" maxlength="80" style="min-height:44px;font-size:15px" value="${escH(inicial)}"></label>`
+    + `<div data-v="resultados"></div></div>`
+    + `<div data-v="error" style="display:contents"></div>`
+    + `<div class="mr-hoja-pie"><button class="mr-boton mr-boton--principal" type="button" data-v="vincular" style="width:auto;min-height:48px;font-size:16px;padding:0 22px" disabled>Vincular</button>`
+    + `<span class="mr-chico mr-empuja">¿No está en Finnegans?</span>`
+    + `<button class="mr-boton mr-boton--secundario mr-boton--chico" type="button" data-marcar="cliente_nuevo">Es cliente nuevo</button>`
+    + `<button class="mr-boton mr-boton--secundario mr-boton--chico" type="button" data-marcar="no_cliente">No es cliente</button></div></div>`;
+  document.body.appendChild(dlg);
+
+  const v = { dlg, alta: a, codigo: null, n: 0, ocupado: false, en: nombre => dlg.querySelector(`[data-v="${nombre}"]`) };
+  dlg.addEventListener("close", () => dlg.remove());
+  // mientras guarda no se cierra: quien la cierra cree que canceló, y no
+  dlg.addEventListener("cancel", e => { if (v.ocupado) e.preventDefault(); });
+  v.en("cerrar").onclick = () => { if (!v.ocupado) dlg.close(); };
+  dlg.showModal();
+  // en la compu, el foco va directo a la búsqueda (en el celular no: abriría el teclado)
+  if (mqAncha.matches) v.en("buscar").focus();
+
+  let demoraV = null;
+  v.en("buscar").addEventListener("input", () => { clearTimeout(demoraV); demoraV = setTimeout(() => buscarEnFinnegans(v), DEMORA_BUSQUEDA_MS); });
+  v.en("resultados").addEventListener("change", e => { if (e.target.name === "vinc") elegir(v, e.target.value); });
+  v.en("vincular").onclick = () => resolverAlta(v, "expo_vincular", { p_alta: a.id, p_codigo: v.codigo }, v.en("vincular"));
+  dlg.querySelectorAll("[data-marcar]").forEach(b => {
+    b.onclick = () => resolverAlta(v, "expo_marcar_alta", { p_alta: a.id, p_estado: b.dataset.marcar }, b);
+  });
+  buscarEnFinnegans(v);
+}
+
+/* El botón dice siempre el código que se va a mandar. */
+function elegir(v, codigo) {
+  v.codigo = codigo;
+  const b = v.en("vincular");
+  b.disabled = !codigo || v.ocupado;
+  b.textContent = codigo ? "Vincular a " + codigo : "Vincular";
+}
+
+async function buscarEnFinnegans(v) {
+  if (v.ocupado) return;
+  const texto = v.en("buscar").value, n = ++v.n;
+  const caja = v.en("resultados");
+  const alcanza = normalizar(texto).replace(/ /g, "").length >= MIN_LETRAS_VINCULAR
+    || soloDigitos(v.alta.cuit).length === LARGO_CUIT || soloDigitos(texto).length === LARGO_CUIT;
+  if (!alcanza) {
+    caja.innerHTML = `<p class="mr-chico">Escribí al menos ${MIN_LETRAS_VINCULAR} letras, el código o el CUIT.</p>`;
+    return elegir(v, null);
+  }
+  caja.innerHTML = `<span class="mr-girando" role="status" aria-label="Buscando"></span>`;
+  let filas;
+  try {
+    filas = await rpcRecepcion("expo_buscar_cliente", { p_texto: texto, p_cuit: v.alta.cuit || null });
+  } catch (e) {
+    if (n !== v.n || !caja.isConnected) return;
+    if (siEsDeSesion(e)) return;   // salir() cierra la hoja
+    caja.innerHTML = avisoFino({ tipo: "error", icono: ICONO.sinRed, rol: "alert", texto: "No se pudo buscar. Revisá la conexión." });
+    return elegir(v, null);
+  }
+  if (n !== v.n || !caja.isConnected || v.ocupado) return;   // llegó tarde: ya se escribió otra cosa (o se está guardando)
+  filas = filas || [];
+  if (!filas.length) {
+    caja.innerHTML = `<p class="mr-chico">No encontramos “${escH(texto.trim())}”. Probá con otra palabra o con el CUIT.</p>`;
+    return elegir(v, null);
+  }
+  // queda elegido solo el que coincide por CUIT: si no, recepción tiene que tocar uno (vincular no se deshace)
+  const seguro = filas[0].coincide_cuit ? filas[0].codigo_erp : null;
+  caja.innerHTML = `<div class="mr-opciones-vinculo" role="radiogroup" aria-labelledby="vPregunta">${filas.map(f => `<label><input type="radio" name="vinc" value="${escH(f.codigo_erp)}"${f.codigo_erp === seguro ? " checked" : ""}>`
+    + `<span class="mr-resultado-razon" style="font-size:15px">${escH(f.razon_social)}</span>`
+    + (f.coincide_cuit ? `<span class="mr-insignia mr-insignia--ok">Coincide el CUIT</span>` : "")
+    + `<span class="mr-sub">Cód. <span class="mr-num">${escH(f.codigo_erp)}</span>${[f.localidad, f.zona, f.vendedor].filter(Boolean).map(x => " · " + escH(x)).join("")}</span></label>`).join("")}</div>`;
+  elegir(v, seguro);
+}
+
+/* Mientras guarda, la hoja queda quieta: ni otra opción, ni otra búsqueda, ni otro botón. */
+function hojaQuieta(v, quieta) {
+  v.ocupado = quieta;
+  v.dlg.querySelectorAll("input, button").forEach(x => { x.disabled = quieta; });
+  if (!quieta) elegir(v, v.codigo);   // el botón de vincular vuelve con el código elegido (o apagado si no hay)
+}
+
+/* Vincular, "Es cliente nuevo" o "No es cliente": con señal (recepción está
+   en la compu de la entrada). Si sale bien, se cierra y se actualiza. */
+async function resolverAlta(v, fn, args, boton) {
+  if (v.ocupado) return;
+  const texto = boton.textContent;
+  hojaQuieta(v, true);
+  ocupar(boton, fn === "expo_vincular" ? "Vinculando…" : "Guardando…");
+  v.en("error").innerHTML = "";
+  try {
+    await rpcRecepcion(fn, args);
+  } catch (e) {
+    if (!v.dlg.isConnected) return;   // la cerró salir()
+    if (siEsDeSesion(e)) return;      // salir() cierra la hoja
+    liberar(boton, texto);
+    hojaQuieta(v, false);   // y el de vincular vuelve a decir el código elegido
+    v.en("error").innerHTML = avisoFino({ tipo: "error", icono: ICONO.atencion, rol: "alert",
+      texto: escH(e instanceof ErrorRed ? "No se pudo guardar. Revisá la conexión y probá de nuevo." : mensajeDe(e)) });
+    if (e instanceof ErrorServidor && rec) cargarRecepcion();   // otra persona ya la resolvió: que se vea
+    return;
+  }
+  v.ocupado = false;
+  v.dlg.close();
+  if (rec) cargarRecepcion();
+}
+
+/* ==========================================================================
    NAVEGACIÓN
    ========================================================================== */
 /* Nunca se acepta un token de sesión pegado en la URL: se borra sin leerlo. */
@@ -1694,11 +2327,14 @@ function navegar() {
     return pantallaRecorrido();
   }
   if ("recorrido" in r) return pantallaRecorrido();
+  if ("recepcion" in r) return abrirRecepcion();
   return claveCartel() ? pantallaBuscar() : claveEquipo() ? pantallaRecorrido() : pantallaInvalido();
 }
 
 window.addEventListener("hashchange", navegar);
-navegar();
+// ¿vuelve de Google? (login de recepción: ?code=… o ?error=…)
+const vuelta = new URLSearchParams(location.search);
+if (vuelta.has("code") || vuelta.has("error")) volverDeGoogle(); else navegar();
 procesarCola();
 
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {

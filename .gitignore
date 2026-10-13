@@ -28,3 +28,4 @@ revision-claude.md
 
 # Carteles generados: tienen la clave del cartel adentro
 cartel/
+.mutacion.log

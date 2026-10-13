@@ -5,7 +5,7 @@
    VERSION tiene que ser igual a APP_VERSION del index.html, y SHELL tiene que
    tener los logos de LOGO (los controla test/app.test.mjs): al publicar una
    versión nueva, cambian los dos. */
-const VERSION = "v1";
+const VERSION = "v2";
 const PREFIJO = "recepcion-expo-";
 const CACHE = PREFIJO + VERSION;
 const SHELL = ["./", "./index.html", "./assets/logo-claro.png", "./assets/logo-oscuro.png"];

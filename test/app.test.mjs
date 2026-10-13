@@ -28,7 +28,7 @@ test('el service worker guarda los logos que usa la app (si se cambia el logo, s
 });
 
 test('el CSS del diseño (tokens.css y bundle.css) está copiado tal cual, sin el andamiaje mr-demo', () => {
-  const lineas = leer('diseno/mooving-recepcion.html').split('\n');
+  const lineas = leer('diseno/mooving-recepcion.html').split(/\r?\n/);   // git en Windows puede dejarlo con CRLF
   const desde = lineas.findIndex((l) => l.startsWith('/* ===== tokens.css'));
   const hasta = lineas.findIndex((l) => l.includes('Andamiaje de vistas previas'));
   const diseno = lineas.slice(desde, hasta).join('\n').trim();

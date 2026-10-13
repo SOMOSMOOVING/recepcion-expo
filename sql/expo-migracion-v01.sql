@@ -2,6 +2,8 @@
 --  EXPO · MIGRACIÓN v01 — tablas, RLS y funciones de la recepción
 --  Se corre en Supabase -> SQL Editor, ANTES de publicar el index.html.
 --  Es idempotente: se puede correr dos veces sin problema.
+--  OJO: si ya corriste la v02 (o las siguientes), volvé a correrlas después
+--  de esta: esta le saca el permiso a TODAS las funciones expo_*.
 -- ============================================================
 --
 -- QUÉ HACE
