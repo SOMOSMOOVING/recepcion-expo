@@ -2,18 +2,26 @@
 // o en el index.html, y verifica que el test que la cuida se dé cuenta. Si una
 // mutación "sobrevive", ese test no sirve.
 //
-//   npm run mutacion                 todas
-//   npm run mutacion -- vincular     solo las que tengan "vincular" en el nombre
+//   npm run mutacion                     todas
+//   npm run mutacion -- vincular         solo las que tengan "vincular" en el nombre
+//   npm run mutacion -- --retomar        sigue una corrida cortada: saltea las que
+//                                        ya quedaron atrapadas en .mutacion.log
+//
+// Van de a una a propósito: en paralelo la compu se queda sin memoria (PGlite y
+// el navegador) y los tests fallan por eso, no por la mutación.
+//
+// Cada resultado se anota en .mutacion.log apenas termina, así una corrida
+// cortada (se apagó la compu, se cerró la sesión) se retoma sin repetir.
 //
 // Para que una mutación cuente como atrapada no alcanza con que "algo falle":
-// · el texto a mutar tiene que aparecer UNA sola vez en la última migración
-//   o en el index.html (si el código cambió y ya no está, se avisa en vez de
-//   pasar en silencio);
+// · el texto a mutar tiene que aparecer UNA sola vez entre todas las
+//   migraciones, o en el index.html o el sw.js (si el código cambió y ya no
+//   está, se avisa en vez de pasar en silencio);
 // · el SQL mutado tiene que cargar (si no carga, fallaría todo y no probaría
 //   nada);
 // · y entre los tests que fallan tiene que estar el de "espera".
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -21,15 +29,32 @@ import { archivosMigracion } from './db.mjs';
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-// Del SQL se muta la última migración; las anteriores corren tal cual (ver
-// db.mjs). De la página, el index.html y el sw.js (los sirve
-// test/navegador.mjs).
-const ARCHIVOS = {
-  sql: { ruta: archivosMigracion().at(-1), variable: 'EXPO_SQL' },
+// Del SQL se muta la migración que tenga el texto (las demás corren tal cual,
+// ver db.mjs); las de la VERIFICACIÓN, la última. De la página, el
+// index.html y el sw.js (los sirve test/navegador.mjs).
+// Con fin de línea normal: git en Windows puede dejar los archivos con CRLF y
+// los textos a buscar están con \n.
+const leerNormal = (ruta) => readFileSync(ruta, 'utf8').replace(/\r\n/g, '\n');
+const MIGRACIONES = archivosMigracion().map((ruta) => ({ ruta, variable: 'EXPO_SQL', original: leerNormal(ruta) }));
+const PAGINA = {
   index: { ruta: join(RAIZ, 'index.html'), variable: 'EXPO_INDEX' },
   sw: { ruta: join(RAIZ, 'sw.js'), variable: 'EXPO_SW' },
 };
-for (const a of Object.values(ARCHIVOS)) a.original = readFileSync(a.ruta, 'utf8');
+for (const a of Object.values(PAGINA)) a.original = leerNormal(a.ruta);
+
+const veces = (texto, buscar) => texto.split(buscar).length - 1;
+
+// Dónde se aplica la mutación: el archivo donde el texto aparece una sola vez.
+function dondeMutar(m) {
+  if (m.archivo === 'index' || m.archivo === 'sw') {
+    const a = PAGINA[m.archivo];
+    return veces(a.original, m.buscar) === 1 ? a : `${veces(a.original, m.buscar)} veces en ${basename(a.ruta)}`;
+  }
+  const candidatas = m.verificacion ? MIGRACIONES.slice(-1) : MIGRACIONES;
+  const total = candidatas.reduce((n, a) => n + veces(a.original, m.buscar), 0);
+  return total === 1 ? candidatas.find((a) => veces(a.original, m.buscar) === 1)
+    : `${total} veces en ${candidatas.map((a) => basename(a.ruta)).join(' y ')}`;
+}
 
 const MUTACIONES = [
   // ── seguridad
@@ -156,7 +181,7 @@ const MUTACIONES = [
     poner: `  if e.estado <> 'en_curso' then` },
   { nombre: 'cartel: más de 8 resultados', prueba: 'cartel',
     espera: 'devuelve como máximo 8',
-    buscar: `     limit 8;`, poner: `     limit 80;` },
+    buscar: `              i.razon_social\n     limit 8;`, poner: `              i.razon_social\n     limit 80;` },
   { nombre: 'cartel: el buscador muestra las altas', prueba: 'cartel',
     espera: 'no muestra las altas de la puerta',
     buscar: `       and i.origen = 'lista'`, poner: '' },
@@ -503,7 +528,7 @@ mqOscuro.addEventListener`, poner: `mqOscuro.addEventListener` },
     buscar: "const TOSTADA_MS = 6000;", poner: "const TOSTADA_MS = 6000000;" },
   { nombre: "equipo: el foco se pierde al repintar", archivo: 'index', prueba: "recorrido-pantalla",
     espera: "deja el foco",
-    buscar: "  volverAlFoco();\n", poner: "" },
+    buscar: "nadieLlego(datos);\n  volverAlFoco();\n", poner: "nadieLlego(datos);\n" },
   { nombre: "equipo: usa la lista guardada de ayer", archivo: 'index', prueba: "recorrido-pantalla",
     espera: "la lista guardada de hoy se usa",
     buscar: " && guardados.datos.hoy === hoyAR();", poner: ";" },
@@ -561,6 +586,159 @@ mqOscuro.addEventListener`, poner: `mqOscuro.addEventListener` },
   { nombre: "sw: borra los cachés de la app de pedidos", archivo: 'sw', prueba: "service-worker",
     espera: "borra solo sus versiones viejas",
     buscar: "claves.filter(k => k.startsWith(PREFIJO) && k !== CACHE)", poner: "claves.filter(k => k !== CACHE)" },
+  { nombre: "recepción: el tablero sin chequear es_admin", prueba: "recepcion",
+    espera: "solo un admin",
+    buscar: "  if not public.es_admin() then\n    raise exception 'expo_solo_admin';\n  end if;\n\n  select * into e from public.expo_ediciones where estado <> 'cerrada';", poner: "  select * into e from public.expo_ediciones where estado <> 'cerrada';" },
+  { nombre: "recepción: el buscador de Finnegans sin chequear es_admin", prueba: "recepcion",
+    espera: "solo un admin",
+    buscar: "  if not public.es_admin() then\n    raise exception 'expo_solo_admin';\n  end if;\n  if char_length(v_cuit) <> 11 then", poner: "  if char_length(v_cuit) <> 11 then" },
+  { nombre: "recepción: el anónimo puede pedir el tablero", prueba: "recepcion",
+    espera: "solo un admin",
+    buscar: "grant execute on function public.expo_recepcion()                to authenticated;", poner: "grant execute on function public.expo_recepcion()                to anon, authenticated;" },
+  { nombre: "recepción: un alta marcada \"no es cliente\" cuenta como cliente", prueba: "recepcion",
+    espera: "si es \"no cliente\", pasa a los no clientes",
+    buscar: "         and coalesce(i.estado_vinculo, 'pendiente') <> 'no_cliente'\n$$;", poner: "\n$$;" },
+  { nombre: "recepción: los que ya llegaron figuran como faltantes", prueba: "recepcion",
+    espera: "quién tenía turno y no llegó",
+    buscar: "         and not exists (select 1 from public.expo_visitas v\n                          where v.invitado_id = i.id and v.dia = hoy)), '[]'::jsonb),", poner: "         ), '[]'::jsonb)," },
+  { nombre: "recepción: las altas ya resueltas siguen en la lista", prueba: "recepcion",
+    espera: "al vincular un alta sale de la lista",
+    buscar: "         and i.estado_vinculo = 'pendiente'), '[]'::jsonb),", poner: "         ), '[]'::jsonb)," },
+  { nombre: "recepción: el buscador ofrece clientes dados de baja", prueba: "recepcion",
+    espera: "por CUIT (con guiones o sin)",
+    buscar: "       where c.activo\n", poner: "       where true\n" },
+  { nombre: "recepción: el buscador devuelve más de 8", prueba: "recepcion",
+    espera: "como mucho 8",
+    buscar: "              k.razon_social\n     limit 8;", poner: "              k.razon_social;" },
+  { nombre: "recepción: \"Coincide el CUIT\" compara mal", prueba: "recepcion",
+    espera: "por CUIT (con guiones o sin)",
+    buscar: "    select k.codigo_erp, k.razon_social, k.localidad, k.zona, k.vendedor,\n           coalesce(k.cuit in (v_cuit, v_cuit_escrito), false)", poner: "    select k.codigo_erp, k.razon_social, k.localidad, k.zona, k.vendedor,\n           k.cuit is not null" },
+  { nombre: "página: canjea un ?code= sin el verificador de este navegador", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "no empezó en este navegador",
+    buscar: "  if (typeof verificador !== \"string\" || !q.get(\"code\")) return pantallaLogin();", poner: "  if (!q.get(\"code\")) return pantallaLogin();" },
+  { nombre: "página: el code de Google queda en la URL", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "sin dejar el code en la URL",
+    buscar: "  history.replaceState(null, \"\", location.pathname + \"#recepcion\");   // el code no queda en la URL ni en el historial\n", poner: "" },
+  { nombre: "página: el login manda el verificador en vez del reto (sin PKCE)", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "con PKCE",
+    buscar: "  u.searchParams.set(\"code_challenge\", await retoPkce(verificador));", poner: "  u.searchParams.set(\"code_challenge\", verificador);" },
+  { nombre: "página: recepción pide sin la sesión", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "las cuatro cifras",
+    buscar: "    return await rpc(fn, args, await tokenValido());", poner: "    return await rpc(fn, args);" },
+  { nombre: "página: si la base dice que la sesión venció, no la renueva", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "la sesión se renueva sola",
+    buscar: "    return rpc(fn, args, await tokenValido(true));", poner: "    throw e;" },
+  { nombre: "página: la sesión vencida no se renueva antes de pedir", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "la sesión se renueva sola",
+    buscar: "  if (!forzar && Date.now() < s.vence - RENOVAR_ANTES_MS) return s.access_token;", poner: "  if (!forzar) return s.access_token;" },
+  { nombre: "página: un faltante con un nombre raro se mete como HTML", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "nunca como HTML",
+    buscar: "`<li class=\"mr-falta\"><span class=\"mr-falta-razon\">${escH(f.razon_social)}</span>`", poner: "`<li class=\"mr-falta\"><span class=\"mr-falta-razon\">${f.razon_social}</span>`" },
+  { nombre: "página: el nombre del alta en la hoja se mete como HTML", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "nunca como HTML",
+    buscar: "<h2 id=\"vTitulo\" class=\"mr-titulo\" style=\"margin-top:6px\">${escH(a.empresa)}</h2>", poner: "<h2 id=\"vTitulo\" class=\"mr-titulo\" style=\"margin-top:6px\">${a.empresa}</h2>" },
+  { nombre: "página: al actualizarse el filtro pierde el foco", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "el filtro por vendedor",
+    buscar: "  cambiarSiHaceFalta(cuerpo, html);\n  volverAlFoco();", poner: "  cambiarSiHaceFalta(cuerpo, html);" },
+  { nombre: "página: si no se puede actualizar, borra lo último que se vio", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "deja lo último con la hora",
+    buscar: "    yo.fallo = true;\n  }\n  repintarRecepcion();", poner: "    yo.fallo = true;\n    yo.datos = null;\n  }\n  repintarRecepcion();" },
+  { nombre: "página: el atraso se cuenta desde el fin del turno", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "las cuatro cifras",
+    buscar: "Atrasado ${escH(duracion(ahora - minutosDe(desde)))}", poner: "Atrasado ${escH(duracion(ahora - minutosDe(hasta)))}" },
+  { nombre: "página: una cuenta sin permiso ve un error genérico", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "no es admin",
+    buscar: "    if (e instanceof ErrorServidor && e.message === \"expo_solo_admin\") return pantallaSinAcceso();\n", poner: "" },
+  { nombre: "página: si otra persona ya resolvió el alta, no se actualiza", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "otra persona ya la resolvió",
+    buscar: "    if (e instanceof ErrorServidor && rec) cargarRecepcion();   // otra persona ya la resolvió: que se vea\n", poner: "" },
+  { nombre: "página: la hoja de vincular no busca por el CUIT que cargó", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "busca en Finnegans por CUIT",
+    buscar: "{ p_texto: texto, p_cuit: v.alta.cuit || null }", poner: "{ p_texto: texto, p_cuit: null }" },
+  { nombre: "recepción: con turno hoy cuenta los turnos de todos los días", prueba: "recepcion",
+    espera: "quién tenía turno y no llegó",
+    buscar: "       where i.edicion_id = e.id\n         and t.dia = hoy),", poner: "       where i.edicion_id = e.id)," },
+  { nombre: "recepción: los turnos de otro día figuran como faltantes de hoy", prueba: "recepcion",
+    espera: "quién tenía turno y no llegó",
+    buscar: "         and t.dia = hoy\n         and not exists", poner: "         and not exists" },
+  { nombre: "recepción: \"sin turno hoy\" mira los turnos de cualquier día", prueba: "recepcion",
+    espera: "quién tenía turno y no llegó",
+    buscar: "left join public.expo_turnos t on t.invitado_id = i.id and t.dia = v.dia", poner: "left join public.expo_turnos t on t.invitado_id = i.id" },
+  { nombre: "recepción: \"Es cliente nuevo\" no cuenta si dijo que venía con un cliente", prueba: "recepcion",
+    espera: "\"Es cliente nuevo\" cuenta como cliente",
+    buscar: "  select (i.categoria = 'cliente' or i.estado_vinculo = 'cliente_nuevo')", poner: "  select (i.categoria = 'cliente')" },
+  { nombre: "recepción: un \"no es cliente\" que venía con un cliente sigue como \"cliente de un cliente\"", prueba: "recepcion",
+    espera: "\"Es cliente nuevo\" cuenta como cliente",
+    buscar: "case when i.categoria in ('cliente', 'cliente_de_cliente') and i.estado_vinculo = 'no_cliente'", poner: "case when i.categoria = 'cliente' and i.estado_vinculo = 'no_cliente'" },
+  { nombre: "recepción: el tablero devuelve el token de las altas", prueba: "recepcion",
+    espera: "cifras de hoy",
+    buscar: "               'id',        i.id,", poner: "               'id',        i.id, 'token', i.token," },
+  { nombre: "recepción: un CUIT escrito en la búsqueda no se busca como CUIT", prueba: "recepcion",
+    espera: "por CUIT (con guiones o sin)",
+    buscar: "  if char_length(v_cuit_escrito) <> 11 then\n    v_cuit_escrito := null;", poner: "  if true then\n    v_cuit_escrito := null;" },
+  { nombre: "recepción: un invitado se busca solo por cómo figura en la copia", prueba: "recepcion",
+    espera: "un invitado de la lista sale una vez",
+    buscar: "             i.busqueda || ' ' || coalesce(c.busqueda, '') as busqueda", poner: "             coalesce(c.busqueda, i.busqueda) as busqueda" },
+  { nombre: "recepción: el buscador ofrece las altas de la puerta", prueba: "recepcion",
+    espera: "las altas nunca",
+    buscar: "       where i.origen = 'lista'\n    ),", poner: "    )," },
+  { nombre: "recepción: un invitado que está en la copia sale dos veces", prueba: "recepcion",
+    espera: "un invitado de la lista sale una vez",
+    buscar: "         and not exists (select 1 from lista l where l.codigo_erp = c.codigo_erp)\n", poner: "" },
+  { nombre: "recepción: la verificación no frena si a recepción le faltan funciones", verificacion: true, prueba: "seguridad",
+    espera: "la verificación de la migración frena",
+    buscar: "    raise exception 'VERIFICACIÓN: a recepción le faltan funciones (la pantalla no andaría): %', hay;", poner: "" },
+  { nombre: "página: lo renovado se guarda aunque hayan tocado Salir", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "mientras se renueva la sesión",
+    buscar: "      if (!ahora || ahora.email !== s.email) {", poner: "      if (false) {" },
+  { nombre: "página: Salir cierra la sesión en todos lados (también en pedidos)", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "no es admin",
+    buscar: "/auth/v1/logout?scope=local`", poner: "/auth/v1/logout`" },
+  { nombre: "página: al caerse la sesión la hoja queda abierta", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "con la hoja abierta",
+    buscar: "  cerrarHojas();\n  pantallaLogin(mensaje);", poner: "  pantallaLogin(mensaje);" },
+  { nombre: "página: mientras vincula se puede cambiar de opción", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "la hoja queda quieta",
+    buscar: "  v.dlg.querySelectorAll(\"input, button\").forEach(x => { x.disabled = quieta; });\n", poner: "" },
+  { nombre: "página: Escape cierra la hoja mientras guarda", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "la hoja queda quieta",
+    buscar: "  dlg.addEventListener(\"cancel\", e => { if (v.ocupado) e.preventDefault(); });\n", poner: "" },
+  { nombre: "página: una actualización vieja pisa la nueva", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "llega tarde no pisa",
+    buscar: "  const vigente = () => rec === yo && vistaN === yo.vista && n === yo.pedido;", poner: "  const vigente = () => rec === yo && vistaN === yo.vista;" },
+  { nombre: "página: el filtro por vendedor sigue en el celular", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "el filtro por vendedor es de escritorio",
+    buscar: "f => !ancha || !rec.vendedor || f.vendedor === rec.vendedor", poner: "f => !rec.vendedor || f.vendedor === rec.vendedor" },
+  { nombre: "página: la renovación de sesión no tiene tope de tiempo", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "no contesta",
+    buscar: "      body: JSON.stringify(cuerpo),\n      signal: ctrl.signal,", poner: "      body: JSON.stringify(cuerpo)," },
+  { nombre: "página: al abrir la hoja el foco no va a la búsqueda", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "busca en Finnegans por CUIT",
+    buscar: "  if (mqAncha.matches) v.en(\"buscar\").focus();\n", poner: "" },
+  { nombre: "página: antes del primer día dice que la expo \"sigue\"", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "hoy no hay expo",
+    buscar: "${d.dias[0] > d.hoy ? \"empieza\" : \"sigue\"}", poner: "sigue" },
+  { nombre: "página: un mail largo se sale de costado", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "con un mail largo",
+    buscar: ";overflow-wrap:anywhere\">${escH(s ? s.email : \"\")}", poner: "\">${escH(s ? s.email : \"\")}" },
+  { nombre: "página: la lista de clientes queda guardada en la compu", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "nunca queda guardada",
+    buscar: "    Object.assign(yo, { datos, vistoEn: Date.now(), fallo: false });", poner: "    Object.assign(yo, { datos, vistoEn: Date.now(), fallo: false });\n    guardarLocal(\"expoRecepcion\", { datos });" },
+  { nombre: "página: la hoja deja elegido el primero aunque no coincida el CUIT", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "no deja nada elegido",
+    buscar: "  const seguro = filas[0].coincide_cuit ? filas[0].codigo_erp : null;", poner: "  const seguro = filas[0].codigo_erp;" },
+  { nombre: "página: la hoja busca por la forma societaria", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "no deja nada elegido",
+    buscar: "filter(w => w.length >= 3 && !SOCIEDADES.has(w))", poner: "filter(w => w.length >= 3)" },
+  { nombre: "página: la hoja busca con una sola letra", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "menos de 2 letras",
+    buscar: "  if (!alcanza) {\n", poner: "  if (false) {\n" },
+  { nombre: "página: Google entra directo con la última cuenta", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "deja elegir la cuenta",
+    buscar: "  u.searchParams.set(\"prompt\", \"select_account\");", poner: "" },
+  { nombre: "página: la × de la hoja se achica", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "la × no se achica",
+    buscar: ".mr-hoja-cerrar { flex: none; }", poner: "" },
   { nombre: 'recorrido: cambiar la clave no invalida la vieja', prueba: 'recorrido',
     espera: 'la vieja deja de andar en el acto',
     buscar: `     set clave_equipo_hash = public.expo__hash_clave(clave)
@@ -568,62 +746,94 @@ mqOscuro.addEventListener`, poner: `mqOscuro.addEventListener` },
    where estado <> 'cerrada';` },
 ];
 
-const VERIFICACION = /do \$verificacion\$[\s\S]*?\$verificacion\$;/;
-
 const NODE_TEST = ['--test', '--test-force-exit', '--test-timeout=60000'];
 
+// Corre node con esos argumentos y variables; devuelve { status, stdout, stderr }.
+// Si Windows no puede abrir el proceso (sin memoria por un momento), espera y
+// reintenta: una corrida de una hora no se cae por eso.
+async function correr(args, env, intentos = 3) {
+  for (let i = 1; ; i++) {
+    const r = await new Promise((ok) => {
+      let hijo;
+      try {
+        hijo = spawn(process.execPath, args, { cwd: RAIZ, env: { ...process.env, ...env } });
+      } catch (e) {
+        return ok({ status: null, stdout: '', stderr: String(e), noAbrio: true });
+      }
+      let stdout = '', stderr = '';
+      hijo.stdout.on('data', (d) => { stdout += d; });
+      hijo.stderr.on('data', (d) => { stderr += d; });
+      hijo.on('error', (e) => ok({ status: null, stdout, stderr: String(e), noAbrio: true }));
+      hijo.on('close', (status) => ok({ status, stdout, stderr }));
+    });
+    if (!r.noAbrio || i >= intentos) return r;
+    await new Promise((ok) => setTimeout(ok, 10000));
+  }
+}
+
 // ¿El SQL mutado carga? Si no carga, la mutación no prueba nada.
-function carga(sql) {
+async function carga(env) {
   const db = pathToFileURL(join(RAIZ, 'test', 'db.mjs')).href;
-  const r = spawnSync(process.execPath,
-    ['--input-type=module', '-e', `import { nuevaBase } from '${db}'; await nuevaBase();`],
-    { cwd: RAIZ, env: { ...process.env, EXPO_SQL: sql }, encoding: 'utf8' });
+  const r = await correr(['--input-type=module', '-e', `import { nuevaBase } from '${db}'; await nuevaBase();`], env);
   return r.status === 0 ? null : (r.stderr.match(/error: (.+)/i) || [])[1] || r.stderr.slice(0, 200);
 }
 
-const filtro = process.argv[2];
+// Una mutación: devuelve { resultado: '✓' | '✗' | '?', linea }.
+async function probar(m, n) {
+  const archivo = dondeMutar(m);
+  if (typeof archivo === 'string') return { resultado: '?', linea: `?  ${m.nombre}: el texto aparece ${archivo} (tiene que ser 1)` };
+  const esSql = !m.archivo || m.archivo === 'sql';
+  const mutado = join(dir, `mutado-${n}` + (esSql ? '.sql' : m.archivo === 'sw' ? '.js' : '.html'));
+  // con una función: un texto de reemplazo con $$ (cierre de función SQL) se
+  // volvería $ si se pasara como string
+  writeFileSync(mutado, archivo.original.replace(m.buscar, () => m.poner));
+  // Los bloques de VERIFICACIÓN frenan la migración si algo quedó abierto: se
+  // sacan para medir a los tests, salvo cuando lo mutado es uno de ellos.
+  const env = { [archivo.variable]: mutado };
+  if (esSql) {
+    env.EXPO_SQL_ARCHIVO = basename(archivo.ruta);
+    if (!m.verificacion) env.EXPO_SIN_VERIFICACION = '1';
+  }
+
+  const error = esSql ? await carga(env) : null;
+  if (error) return { resultado: '?', linea: `?  ${m.nombre}: el SQL mutado no carga (${error.trim()})` };
+
+  const r = await correr([...NODE_TEST, `test/${m.prueba}.test.mjs`], env);
+  if (r.noAbrio) return { resultado: '?', linea: `?  ${m.nombre}: no se pudo correr el test (${r.stderr.trim()}); probá con --retomar` };
+  const fallaron = [...r.stdout.matchAll(/✖ (.+?) \(\d/g)].map((x) => x[1]);
+  if (fallaron.some((t) => t.includes(m.espera))) return { resultado: '✓', linea: `✓  ${m.nombre}` };
+  if (r.status === 0) return { resultado: '✗', linea: `✗  SOBREVIVIÓ  ${m.nombre}` };
+  return { resultado: '✗', linea: `✗  SOBREVIVIÓ  ${m.nombre}: falló otro test y no "${m.espera}" (${fallaron.join(' | ') || 'sin detalle'})` };
+}
+
+const argumentos = process.argv.slice(2);
+const retomar = argumentos.includes('--retomar');
+const filtro = argumentos.find((a) => a !== '--retomar');
+const LOG = join(RAIZ, '.mutacion.log');   // una línea JSON por mutación terminada (no va al repo)
+
+const yaAtrapadas = new Set();
+if (retomar && existsSync(LOG)) {
+  for (const l of readFileSync(LOG, 'utf8').split('\n').filter(Boolean)) {
+    const x = JSON.parse(l);
+    if (x.resultado === '✓') yaAtrapadas.add(x.nombre);
+  }
+} else {
+  writeFileSync(LOG, '');
+}
+
+const pendientes = MUTACIONES.filter((x) => (!filtro || x.nombre.includes(filtro)) && !yaAtrapadas.has(x.nombre));
+if (yaAtrapadas.size) console.log(`Retomando: ${yaAtrapadas.size} ya atrapadas, faltan ${pendientes.length}.`);
 const dir = mkdtempSync(join(tmpdir(), 'expo-mutacion-'));
 let sobrevivieron = 0, rotas = 0;
 
-for (const m of MUTACIONES.filter((x) => !filtro || x.nombre.includes(filtro))) {
-  const archivo = ARCHIVOS[m.archivo || 'sql'];
-  const veces = archivo.original.split(m.buscar).length - 1;
-  if (veces !== 1) {
-    console.log(`?  ${m.nombre}: el texto aparece ${veces} veces en ${basename(archivo.ruta)} (tiene que ser 1)`);
-    rotas++;
-    continue;
-  }
-  const esSql = !m.archivo || m.archivo === 'sql';
-  const mutado = join(dir, 'mutado' + (esSql ? '.sql' : m.archivo === 'sw' ? '.js' : '.html'));
-  // con una función: un texto de reemplazo con $$ (cierre de función SQL) se
-  // volvería $ si se pasara como string
-  let texto = archivo.original.replace(m.buscar, () => m.poner);
-  // El bloque de VERIFICACIÓN del final frena la migración si algo quedó
-  // abierto: se saca para medir a los tests, salvo cuando lo mutado es él.
-  if (esSql && !m.verificacion) texto = texto.replace(VERIFICACION, '');
-  writeFileSync(mutado, texto);
-
-  const error = esSql ? carga(mutado) : null;
-  if (error) {
-    console.log(`?  ${m.nombre}: el SQL mutado no carga (${error.trim()})`);
-    rotas++;
-    continue;
-  }
-
-  const r = spawnSync(process.execPath, [...NODE_TEST, `test/${m.prueba}.test.mjs`],
-    { cwd: RAIZ, env: { ...process.env, [archivo.variable]: mutado }, encoding: 'utf8' });
-  const fallaron = [...r.stdout.matchAll(/✖ (.+?) \(\d/g)].map((x) => x[1]);
-  if (fallaron.some((t) => t.includes(m.espera))) {
-    console.log(`✓  ${m.nombre}`);
-  } else if (r.status === 0) {
-    console.log(`✗  SOBREVIVIÓ  ${m.nombre}`);
-    sobrevivieron++;
-  } else {
-    console.log(`✗  SOBREVIVIÓ  ${m.nombre}: falló otro test y no "${m.espera}" (${fallaron.join(' | ') || 'sin detalle'})`);
-    sobrevivieron++;
-  }
+for (const [n, m] of pendientes.entries()) {
+  const { resultado, linea } = await probar(m, n);
+  console.log(linea);
+  appendFileSync(LOG, JSON.stringify({ nombre: m.nombre, resultado, linea }) + '\n');
+  if (resultado === '✗') sobrevivieron++;
+  if (resultado === '?') rotas++;
 }
 
 rmSync(dir, { recursive: true, force: true });
-console.log(`\n${sobrevivieron} sobrevivieron, ${rotas} sin aplicar.`);
+console.log(`\n${sobrevivieron} sobrevivieron, ${rotas} sin aplicar` + (yaAtrapadas.size ? ` (más ${yaAtrapadas.size} ya atrapadas antes).` : '.'));
 process.exit(sobrevivieron || rotas ? 1 : 0);

@@ -10,7 +10,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, basename } from 'node:path';
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -53,12 +53,25 @@ export function archivosMigracion() {
     .map((f) => join(dir, f));
 }
 
-// El SQL de cada migración. EXPO_SQL reemplaza SOLO la última (la prueba de
-// mutación la muta); las anteriores se corren igual que en la base real.
+// El bloque de VERIFICACIÓN del final de cada migración (frena si algo quedó
+// abierto).
+export const BLOQUE_VERIFICACION = /do \$verificacion\$[\s\S]*?\$verificacion\$;/;
+
+// El SQL de cada migración, en orden. Para la prueba de mutación:
+// · EXPO_SQL reemplaza UNA migración (la de nombre EXPO_SQL_ARCHIVO, o la
+//   última); las demás se corren igual que en la base real.
+// · EXPO_SIN_VERIFICACION saca los bloques de VERIFICACIÓN: así lo que se
+//   mide son los tests, no el freno de la migración.
 export function leerMigraciones() {
   const archivos = archivosMigracion();
-  if (process.env.EXPO_SQL) archivos[archivos.length - 1] = process.env.EXPO_SQL;
-  return archivos.map((f) => readFileSync(f, 'utf8'));
+  if (process.env.EXPO_SQL) {
+    const nombre = process.env.EXPO_SQL_ARCHIVO;
+    const i = nombre ? archivos.findIndex((f) => basename(f) === nombre) : archivos.length - 1;
+    if (i < 0) throw new Error(`EXPO_SQL_ARCHIVO: no existe ${nombre}`);
+    archivos[i] = process.env.EXPO_SQL;
+  }
+  const sql = archivos.map((f) => readFileSync(f, 'utf8'));
+  return process.env.EXPO_SIN_VERIFICACION ? sql.map((s) => s.replace(BLOQUE_VERIFICACION, '')) : sql;
 }
 
 // Supabase corre en UTC; PGlite toma la zona de la máquina. Si los tests
