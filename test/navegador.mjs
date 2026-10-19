@@ -197,6 +197,10 @@ export function desbordes(page) {
     if (document.documentElement.scrollWidth > ancho) fuera.push(`la página scrollea de costado (${document.documentElement.scrollWidth} > ${ancho})`);
     for (const el of document.querySelectorAll('#app *')) {
       if (el.closest('svg') && el.tagName.toLowerCase() !== 'svg') continue;   // lo de adentro de un dibujo lo recorta el dibujo: se mide el svg
+      // lo que recorta un contenedor (overflow hidden) que está dentro de la pantalla no se ve afuera
+      let padre = el.parentElement;
+      while (padre && padre.id !== 'app' && getComputedStyle(padre).overflow !== 'hidden') padre = padre.parentElement;
+      if (padre && padre.id !== 'app') { const c = padre.getBoundingClientRect(); if (c.right <= ancho + 0.5 && c.left >= -0.5) continue; }
       const r = el.getBoundingClientRect();
       if (r.width && (r.right > ancho + 0.5 || r.left < -0.5)) fuera.push(`${el.tagName.toLowerCase()}.${el.className} (${Math.round(r.left)}–${Math.round(r.right)})`);
     }

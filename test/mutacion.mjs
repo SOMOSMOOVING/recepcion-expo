@@ -739,15 +739,18 @@ mqOscuro.addEventListener`, poner: `mqOscuro.addEventListener` },
   { nombre: "página: la × de la hoja se achica", archivo: 'index', prueba: "recepcion-pantalla",
     espera: "la × no se achica",
     buscar: ".mr-hoja-cerrar { flex: none; }", poner: "" },
-  { nombre: "portada: en la compu, sin datos, no usa la portada", archivo: 'index', prueba: "recepcion-pantalla",
-    espera: "portada de marca",
-    buscar: "    html: ancha\n      ? portada(", poner: "    html: false\n      ? portada(" },
-  { nombre: "portada: el login de la compu no usa la portada", archivo: 'index', prueba: "recepcion-pantalla",
-    espera: "portada de marca",
-    buscar: "  const vista = pintar(mqAncha.matches\n    ? pantalla({ datos: [\"Recepción\"], ancha: true, arriba: false, cuerpo: portada({ titulo: \"Entrá", poner: "  const vista = pintar(false\n    ? pantalla({ datos: [\"Recepción\"], ancha: true, arriba: false, cuerpo: portada({ titulo: \"Entrá" },
-  { nombre: "portada: quedan dos \"Salir\"", archivo: 'index', prueba: "recepcion-pantalla",
-    espera: "portada de marca",
-    buscar: ".mr-pantalla:has(.portada-recepcion) .pie-salir { display: none; }", poner: "" },
+  { nombre: "mosaico: en la compu, sin datos, no usa el mosaico", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "afiche y mosaico",
+    buscar: "    html: ancha\n      ? mosaico(", poner: "    html: false\n      ? mosaico(" },
+  { nombre: "mosaico: el login de la compu no usa el mosaico", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "afiche y mosaico",
+    buscar: "  const vista = pintar(mqAncha.matches\n    ? pantalla({ datos: [\"Recepción\"], ancha: true, arriba: false, cuerpo: mosaico({ titulo: \"Entrá", poner: "  const vista = pintar(false\n    ? pantalla({ datos: [\"Recepción\"], ancha: true, arriba: false, cuerpo: mosaico({ titulo: \"Entrá" },
+  { nombre: "mosaico: quedan dos \"Salir\"", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "afiche y mosaico",
+    buscar: ".mr-pantalla:has(.mosaico) .pie-salir { display: none; }", poner: "" },
+  { nombre: "mosaico: con pocos datos faltan los bloques de marca", archivo: 'index', prueba: "recepcion-pantalla",
+    espera: "afiche y mosaico",
+    buscar: "BLOQUES_DE_MARCA.slice(0, Math.max(0, FICHAS_EN_EL_MOSAICO - datos.length))", poner: "[]" },
   { nombre: 'recorrido: cambiar la clave no invalida la vieja', prueba: 'recorrido',
     espera: 'la vieja deja de andar en el acto',
     buscar: `     set clave_equipo_hash = public.expo__hash_clave(clave)
@@ -759,7 +762,9 @@ const NODE_TEST = ['--test', '--test-force-exit', '--test-timeout=60000'];
 
 // Corre node con esos argumentos y variables; devuelve { status, stdout, stderr }.
 // Si Windows no puede abrir el proceso (sin memoria por un momento), espera y
-// reintenta: una corrida de una hora no se cae por eso.
+// reintenta: una corrida de una hora no se cae por eso. Y si un test se cuelga
+// (el navegador que no contesta), lo corta a los TOPE_TEST_MS: no traba toda la corrida.
+const TOPE_TEST_MS = 8 * 60 * 1000;
 async function correr(args, env, intentos = 3) {
   for (let i = 1; ; i++) {
     const r = await new Promise((ok) => {
@@ -772,8 +777,10 @@ async function correr(args, env, intentos = 3) {
       let stdout = '', stderr = '';
       hijo.stdout.on('data', (d) => { stdout += d; });
       hijo.stderr.on('data', (d) => { stderr += d; });
-      hijo.on('error', (e) => ok({ status: null, stdout, stderr: String(e), noAbrio: true }));
-      hijo.on('close', (status) => ok({ status, stdout, stderr }));
+      const tope = setTimeout(() => { colgado = true; hijo.kill(); }, TOPE_TEST_MS);
+      let colgado = false;
+      hijo.on('error', (e) => { clearTimeout(tope); ok({ status: null, stdout, stderr: String(e), noAbrio: true }); });
+      hijo.on('close', (status) => { clearTimeout(tope); ok({ status, stdout, stderr, colgado }); });
     });
     if (!r.noAbrio || i >= intentos) return r;
     await new Promise((ok) => setTimeout(ok, 10000));
@@ -809,6 +816,7 @@ async function probar(m, n) {
 
   const r = await correr([...NODE_TEST, `test/${m.prueba}.test.mjs`], env);
   if (r.noAbrio) return { resultado: '?', linea: `?  ${m.nombre}: no se pudo correr el test (${r.stderr.trim()}); probá con --retomar` };
+  if (r.colgado) return { resultado: '?', linea: `?  ${m.nombre}: el test se colgó y se cortó a los ${TOPE_TEST_MS / 60000} min; probá con --retomar` };
   const fallaron = [...r.stdout.matchAll(/✖ (.+?) \(\d/g)].map((x) => x[1]);
   if (fallaron.some((t) => t.includes(m.espera))) return { resultado: '✓', linea: `✓  ${m.nombre}` };
   if (r.status === 0) return { resultado: '✗', linea: `✗  SOBREVIVIÓ  ${m.nombre}` };

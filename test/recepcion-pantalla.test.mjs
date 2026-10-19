@@ -588,15 +588,16 @@ test('320 px · la hoja con un nombre largo: la × no se achica ni se va, y el C
   await cerrar(page);
 });
 
-test(`${ESCRITORIO} px · en la compu, sin datos para mostrar, la portada de marca: entrar con Google y "No hay una expo abierta" (con Salir)`, async () => {
+test(`${ESCRITORIO} px · en la compu, sin datos para mostrar, afiche y mosaico: entrar con Google y "No hay una expo abierta" (con Salir)`, async () => {
   let { page } = await abrir({ ancho: ESCRITORIO, hash: '#recepcion' });
-  await page.waitForSelector('.portada-recepcion');
-  assert.equal(await page.textContent('.portada-nombre'), 'Mooving' + 'Recepción');
-  assert.ok(await page.$('.portada-recepcion #google'), 'el botón de Google no está en la portada');
+  await page.waitForSelector('.mosaico');
+  assert.equal(await page.textContent('.afiche-titulo'), 'Entrá con tu cuenta de Google');
+  assert.equal(await page.$$eval('.mosaico .ficha', (l) => l.length), 6, 'el mosaico no tiene sus seis bloques');
+  assert.ok(await page.$('.afiche #google'), 'el botón de Google no está en el afiche');
   await cerrar(page);
 
   ({ page } = await abrirRecepcion({ ancho: ESCRITORIO, rpc: { expo_recepcion: () => ({ estado: 'sin_edicion', hoy: hoy() }) } }));
-  await page.waitForSelector('.portada-recepcion');
+  await page.waitForSelector('.mosaico');
   assert.match(await texto(page), /No hay una expo abierta/);
   assert.equal(await page.isVisible('.pie-salir'), false, 'quedan dos "Salir"');
   await page.click('[data-salir]');
@@ -605,19 +606,19 @@ test(`${ESCRITORIO} px · en la compu, sin datos para mostrar, la portada de mar
   await cerrar(page);
 });
 
-test(`${CELULAR} px · en el celular, sin datos, el estado de siempre (sin portada)`, async () => {
+test(`${CELULAR} px · en el celular, sin datos, el estado de siempre (sin mosaico)`, async () => {
   const { page } = await abrirRecepcion({ ancho: CELULAR, rpc: { expo_recepcion: () => ({ estado: 'sin_edicion', hoy: hoy() }) } });
   await page.waitForSelector('text=No hay una expo abierta');
-  assert.equal(await page.$('.portada-recepcion'), null);
+  assert.equal(await page.$('.mosaico'), null);
   assert.equal(await page.isVisible('.pie-salir'), true);
   await cerrar(page);
 });
 
 for (const ancho of [768, 1024, ESCRITORIO]) {
-  test(`${ancho} px · la portada: nada se corta`, async () => {
+  test(`${ancho} px · afiche y mosaico: nada se corta`, async () => {
     for (const op of [{ hash: '#recepcion' }, { hash: '#recepcion', local: conSesion, rpc: { expo_recepcion: () => tablero({ es_dia: false, dias: [dia(2), dia(3)] }) } }]) {
       const { page } = await abrir({ ancho, alto: 700, ...op });
-      await page.waitForSelector('.portada-recepcion');
+      await page.waitForSelector('.mosaico');
       assert.deepEqual(await desbordes(page), []);
       await cerrar(page);
     }
