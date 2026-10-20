@@ -371,6 +371,25 @@ dialog.velo::backdrop { background: rgba(23, 20, 29, .4); }
 .mr-hoja-cerrar { flex: none; }
 .mr-hoja-cabeza > div { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 480px) { .mr-ficha { grid-template-columns: 1fr; gap: 0; } .mr-ficha dd + dt { margin-top: 6px; } }
+/* Recepción en la compu, sin datos para mostrar (entrar, sin acceso, sin expo,
+   hoy no hay expo, antes de abrir): la sala (decidido el 19/10). Partículas
+   que escriben "Expo Mooving 2027" en la serif del diseño, con la doble O en
+   amarillo y celeste; el cursor las aparta y un toque las dispersa. Siempre
+   clara (data-theme="light"), también con el celular o la compu en oscuro. */
+.sala-recepcion { position: relative; overflow: hidden; min-height: max(520px, calc(100dvh - 140px)); border-radius: var(--radio-grande); border: 1px solid var(--linea); background: #f6f2ea; color: var(--tinta); }
+.sala-recepcion canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; touch-action: none; }
+.sala-rotulo { position: absolute; left: var(--esp-6); top: var(--esp-6); font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: .32em; text-transform: uppercase; color: #8a7f6c; pointer-events: none; }
+.sala-pie { position: absolute; left: var(--esp-6); right: var(--esp-6); bottom: var(--esp-6); display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--esp-6); pointer-events: none; }
+.sala-mensaje { display: flex; flex-direction: column; gap: var(--esp-3); max-width: 520px; pointer-events: auto; }
+.sala-titulo { font-family: var(--font-serif); font-weight: 400; font-size: clamp(30px, 2.8vw, 42px); line-height: 1.05; letter-spacing: -0.01em; }
+.sala-acciones { display: flex; flex-wrap: wrap; gap: var(--esp-3); }
+.sala-acciones .mr-boton { width: auto; padding: 0 28px; }
+.sala-datos { display: flex; flex-wrap: wrap; gap: var(--esp-6); pointer-events: auto; }
+.sala-dato { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sala-dato-valor { font-family: var(--font-serif); font-size: 34px; line-height: 1; }
+.sala-dato-rotulo { font-size: 12px; line-height: 16px; color: var(--tinta-2); max-width: 150px; }
+/* en la sala, "Salir" va con el mensaje: el de abajo sobra */
+.mr-pantalla:has(.sala-recepcion) .pie-salir { display: none; }
 </style>
 </head>
 <body>
@@ -1834,18 +1853,123 @@ function siEsDeSesion(e) {
   return true;
 }
 
-/* ---------- pantallas de entrada (no están dibujadas: piezas del diseño) ---------- */
+/* ---------- la sala (compu, sin datos) ---------- */
+const ANIO_VISTO = "expoAnio";   // el año de la última expo que se vio (solo el número): para la sala antes de entrar
+const SALA_TINTA = "#1f1a24", SALA_AMARILLO = "#c9b400", SALA_CELESTE = "#00a8e2", SALA_FONDO = "246, 242, 234";
+const nombreDeLaExpo = anio => "Expo Mooving" + (anio ? " " + anio : "");
+
+/* titulo: texto plano. textos, aviso y acciones: marcado ya escapado.
+   datos: [{ valor, rotulo }] en texto plano (acá se escapan). */
+function sala({ anio, titulo, textos = "", aviso: arriba = "", acciones = "", datos = [] }) {
+  const nombre = nombreDeLaExpo(anio);
+  return `<div class="sala-recepcion" data-theme="light" data-sala="${escH(nombre)}">`
+    + `<canvas aria-hidden="true"></canvas><p class="mr-oculto">${escH(nombre)}</p>`
+    + `<p class="sala-rotulo">Recepción</p>`
+    + `<div class="sala-pie"><div class="sala-mensaje">${arriba}<h1 class="sala-titulo">${escH(titulo)}</h1>${textos}`
+    + (acciones ? `<div class="sala-acciones">${acciones}</div>` : "") + `</div>`
+    + (datos.length ? `<div class="sala-datos">${datos.map(d => `<div class="sala-dato"><span class="sala-dato-valor">${escH(d.valor)}</span><span class="sala-dato-rotulo">${escH(d.rotulo)}</span></div>`).join("")}</div>` : "")
+    + `</div></div>`;
+}
+
+/* Pone en marcha las partículas de la sala que haya en pantalla (una vez por
+   sala). Se apaga sola: cuando se acomodan deja de dibujar, y vuelve con el
+   cursor o un toque; cuando la sala sale de la pantalla, se termina. */
+async function encenderSala() {
+  const el = document.querySelector(".sala-recepcion:not([data-encendida])");
+  if (!el) return;
+  el.dataset.encendida = "1";
+  const cv = el.querySelector("canvas"), c = cv.getContext("2d");
+  const quieta = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const dp = Math.min(2, window.devicePixelRatio || 1);
+  let W = 0, H = 0, P = [], raton = { x: -999, y: -999 }, andando = false;
+  try { await document.fonts.load("italic 80px 'Instrument Serif'", "Expo Mooving"); } catch (e) { /* va con la de respaldo */ }
+
+  // Los puntos de la palabra: se escribe en un lienzo aparte y se toman los píxeles.
+  function puntos() {
+    const texto = el.dataset.sala;
+    const o = document.createElement("canvas"); o.width = W; o.height = H;
+    const g = o.getContext("2d");
+    let t = Math.min(H * 0.26, 220);
+    const fuente = tam => `italic 400 ${tam}px "Instrument Serif", Georgia, serif`;
+    g.font = fuente(t);
+    while (g.measureText(texto).width > W * 0.86 && t > 24) { t -= 2; g.font = fuente(t); }
+    g.textBaseline = "middle";
+    const oo = texto.indexOf("Mooving") + 1;   // la doble O de Mooving, en los colores del logo
+    let x = W / 2 - g.measureText(texto).width / 2;
+    Array.from(texto).forEach((letra, i) => {
+      g.fillStyle = i === oo ? "#ff0" : i === oo + 1 ? "#0ff" : "#fff";
+      g.fillText(letra, x, H * 0.4);
+      x += g.measureText(letra).width;
+    });
+    const d = g.getImageData(0, 0, W, H).data, pts = [];
+    for (let y = 0; y < H; y += 3) for (let px = 0; px < W; px += 3) {
+      const k = (y * W + px) * 4;
+      if (d[k + 3] > 128) pts.push([px, y, d[k + 2] < 100 ? SALA_AMARILLO : d[k] < 100 ? SALA_CELESTE : SALA_TINTA]);
+    }
+    return pts;
+  }
+  function armar() {
+    const b = el.getBoundingClientRect();
+    if (!b.width || !b.height) return;
+    W = Math.round(b.width); H = Math.round(b.height);
+    cv.width = W * dp; cv.height = H * dp; c.setTransform(dp, 0, 0, dp, 0, 0);
+    const T = puntos();
+    while (P.length < T.length) P.push({ x: Math.random() * W, y: H + 20, vx: 0, vy: 0, s: Math.random() * 1.3 + 1.1 });
+    P.length = T.length;
+    P.forEach((p, i) => { [p.tx, p.ty, p.c] = T[i]; if (quieta) { p.x = p.tx; p.y = p.ty; } });
+    andar();
+  }
+  function dibujar(rastro) {
+    c.fillStyle = `rgba(${SALA_FONDO}, ${rastro ? 0.32 : 1})`;
+    c.fillRect(0, 0, W, H);
+    for (const p of P) { c.fillStyle = p.c; c.fillRect(p.x, p.y, p.s, p.s); }
+  }
+  function cuadro() {
+    if (!el.isConnected) { andando = false; return; }   // la sala ya no está: se termina
+    let mov = 0;
+    for (const p of P) {
+      const dx = p.x - raton.x, dy = p.y - raton.y, d2 = dx * dx + dy * dy;
+      if (d2 < 8000) { const f = (8000 - d2) / 8000 * 2.6, d = Math.sqrt(d2) || 1; p.vx += dx / d * f; p.vy += dy / d * f; }
+      p.vx = (p.vx + (p.tx - p.x) * 0.014) * 0.85;
+      p.vy = (p.vy + (p.ty - p.y) * 0.014) * 0.85;
+      p.x += p.vx; p.y += p.vy;
+      mov = Math.max(mov, Math.abs(p.vx) + Math.abs(p.vy));
+    }
+    dibujar(true);
+    if (mov < 0.02 && raton.x < -900) { dibujar(false); andando = false; return; }   // acomodadas: deja de dibujar
+    requestAnimationFrame(cuadro);
+  }
+  function andar() {
+    if (quieta) return dibujar(false);
+    if (!andando) { andando = true; requestAnimationFrame(cuadro); }
+  }
+  cv.addEventListener("pointermove", e => { const b = cv.getBoundingClientRect(); raton.x = e.clientX - b.left; raton.y = e.clientY - b.top; andar(); });
+  cv.addEventListener("pointerleave", () => { raton.x = raton.y = -999; andar(); });
+  cv.addEventListener("pointerdown", e => {   // un toque las dispersa y se vuelven a juntar
+    if (quieta) return;
+    const b = cv.getBoundingClientRect(), mx = e.clientX - b.left, my = e.clientY - b.top;
+    for (const p of P) { const dx = p.x - mx, dy = p.y - my, d = Math.hypot(dx, dy) || 1, f = Math.min(40, 3200 / d); p.vx += dx / d * f; p.vy += dy / d * f; }
+    andar();
+  });
+  new ResizeObserver(() => { if (el.isConnected) armar(); }).observe(el);
+}
+
+/* ---------- pantallas de entrada (no están dibujadas: piezas del diseño;
+   en la compu, la sala) ---------- */
 function pantallaLogin(mensaje = "") {
-  const vista = pintar(pantalla({
-    datos: ["Recepción"],
-    cuerpo: (mensaje ? aviso({ tipo: "error", icono: ICONO.atencion, titulo: "No se pudo entrar", texto: escH(mensaje), textoChico: true }) : "")
-      + estado({
-        icono: ICONO.personas, titulo: "Recepción de la expo", grande: false,
-        textos: `<p class="mr-chico">Entrá con tu cuenta de Google de Mooving, la misma de la app de pedidos.</p>`,
-      }),
-    barra: `<button class="mr-boton mr-boton--principal" type="button" id="google">Entrar con Google</button>`,
-  }));
+  const error = mensaje ? aviso({ tipo: "error", icono: ICONO.atencion, titulo: "No se pudo entrar", texto: escH(mensaje), textoChico: true }) : "";
+  const boton = `<button class="mr-boton mr-boton--principal" type="button" id="google">Entrar con Google</button>`;
+  const texto = `<p class="mr-chico">Entrá con tu cuenta de Google de Mooving, la misma de la app de pedidos.</p>`;
+  const vista = pintar(mqAncha.matches
+    ? pantalla({ datos: ["Recepción"], ancha: true, arriba: false, cuerpo: sala({ anio: leerLocal(ANIO_VISTO), titulo: "Entrá con tu cuenta de Google",
+      textos: `<p class="mr-chico">La misma de la app de pedidos.</p>`, aviso: error, acciones: boton }) })
+    : pantalla({
+      datos: ["Recepción"],
+      cuerpo: error + estado({ icono: ICONO.personas, titulo: "Recepción de la expo", grande: false, textos: texto }),
+      barra: boton,
+    }));
   $("#google").onclick = () => entrarConGoogle($("#google"));
+  encenderSala();
   return vista;
 }
 
@@ -1853,15 +1977,18 @@ function pantallaSinAcceso() {
   const s = sesion();
   rec = null;
   cerrarHojas();
-  const vista = pintar(pantalla({
-    datos: ["Recepción"],
-    cuerpo: estado({
-      tipo: "error", icono: ICONO.invalido, titulo: "Tu cuenta no tiene acceso a recepción", grande: false,
-      textos: `<p class="mr-chico">Entraste como <b style="color:var(--tinta);overflow-wrap:anywhere">${escH(s ? s.email : "")}</b>. Pedile a quien administra la app de pedidos que te sume como admin.</p>`,
-    }),
-    barra: `<button class="mr-boton mr-boton--secundario mr-boton--ancho" type="button" id="otra">Entrar con otra cuenta</button>`,
-  }));
+  const titulo = "Tu cuenta no tiene acceso a recepción";
+  const texto = `<p class="mr-chico">Entraste como <b style="color:var(--tinta);overflow-wrap:anywhere">${escH(s ? s.email : "")}</b>. Pedile a quien administra la app de pedidos que te sume como admin.</p>`;
+  const boton = `<button class="mr-boton mr-boton--secundario mr-boton--ancho" type="button" id="otra">Entrar con otra cuenta</button>`;
+  const vista = pintar(mqAncha.matches
+    ? pantalla({ datos: ["Recepción"], ancha: true, arriba: false, cuerpo: sala({ anio: leerLocal(ANIO_VISTO), titulo, textos: texto, acciones: boton }) })
+    : pantalla({
+      datos: ["Recepción"],
+      cuerpo: estado({ tipo: "error", icono: ICONO.invalido, titulo, grande: false, textos: texto }),
+      barra: boton,
+    }));
   $("#otra").onclick = () => salir();
+  encenderSala();
   return vista;
 }
 
@@ -1929,6 +2056,7 @@ async function cargarRecepcion() {
     const datos = await rpcRecepcion("expo_recepcion");
     if (!vigente()) return;
     Object.assign(yo, { datos, vistoEn: Date.now(), fallo: false });
+    if (datos && datos.anio) guardarLocal(ANIO_VISTO, datos.anio);
   } catch (e) {
     if (!vigente()) return;
     if (siEsDeSesion(e)) return;
@@ -1943,7 +2071,7 @@ function pintarRecepcion() {
   const ancha = mqAncha.matches;
   rec.vista = pintar(pantalla({
     datos: ["Recepción", ""], ancha, arriba: false, cuerpo: "",
-    extra: `<div style="padding:0 var(--esp-4) var(--esp-6);text-align:center"><button class="mr-boton mr-boton--texto" type="button" id="salir">Salir</button></div>`,
+    extra: `<div class="pie-salir" style="padding:0 var(--esp-4) var(--esp-6);text-align:center"><button class="mr-boton mr-boton--texto" type="button" id="salir">Salir</button></div>`,
   }));
   rec.ancha = ancha;
   $("#salir").onclick = () => salir();
@@ -1963,6 +2091,7 @@ function tocarEnRecepcion(e) {
   if (!b) return;
   if (b.dataset.ver) { rec.abiertos.add(b.dataset.ver); return repintarRecepcion(); }
   if (b.dataset.vincular) return abrirVincular(b.dataset.vincular);
+  if ("salir" in b.dataset) return salir();   // el de la sala
 }
 
 /* Cabecera y cuerpo con lo que hay ahora (solo cambia lo que cambió: el
@@ -1984,6 +2113,7 @@ function repintarRecepcion() {
   const volverAlFoco = focoEnRecepcion();
   cambiarSiHaceFalta(cuerpo, html);
   volverAlFoco();
+  encenderSala();
 }
 
 /* "Recepción · Miércoles 15 · día 2 de 3" (escritorio) / "Recepción · Mié 15" */
@@ -2016,12 +2146,21 @@ function cuerpoRecepcion(d, ancha, ahora, antesDeAbrir) {
       texto: (rec.vistoEn ? `Mostramos lo de las ${escH(hora(rec.vistoEn))}. ` : "") + `Reintentamos cada ${REFRESCO_RECEPCION_MS / 1000} s.` })
     : "";
   if (!d) return { html: fallo || `<span class="mr-girando" role="status" aria-label="Cargando" style="align-self:center;margin-top:var(--esp-6)"></span>` };
+  // sin datos para mostrar: en la compu, la sala (el título es texto plano); en
+  // el celular, el estado de siempre
+  const sinDatos = (m, extra, datos, textosAncha = m.textos) => ({
+    html: ancha
+      ? sala({ anio: d.anio, titulo: m.titulo, textos: textosAncha, aviso: fallo, datos,
+        acciones: `<button class="mr-boton mr-boton--secundario" type="button" data-salir>Salir</button>` })
+      : fallo + estado({ ...m, titulo: escH(m.titulo), grande: false }) + extra,
+  });
   if (d.estado === "sin_edicion") {
-    return { html: fallo + estado({ icono: ICONO.reloj, titulo: "No hay una expo abierta", grande: false,
-      textos: `<p class="mr-chico">Cuando se cree la edición, acá se ve la recepción del día.</p>` }) };
+    return sinDatos({ icono: ICONO.reloj, titulo: "No hay una expo abierta",
+      textos: `<p class="mr-chico">Cuando se cree la edición, acá se ve la recepción del día.</p>` }, "", []);
   }
-  if (!d.es_dia) return { html: fallo + hoyNoHayExpo(d) + ayer(d) };
-  if (antesDeAbrir) return { html: fallo + abreALas(d) + ayer(d) };
+  if (!d.es_dia) return sinDatos(hoyNoHayExpo(d), ayer(d), datosHoyNoHayExpo(d));
+  // antes de abrir, en la compu el detalle va en los bloques
+  if (antesDeAbrir) return sinDatos(abreALas(d), ayer(d), datosAntesDeAbrir(d), "");
 
   const previa = d.estado !== "en_curso"
     ? aviso({ tipo: "atencion", titulo: "La expo todavía figura «antes de la expo»", textoChico: true,
@@ -2142,23 +2281,52 @@ function noClientesHoy(d) {
     }).join("") + `</ul></div>`;
 }
 
-/* "Antes de abrir": lo que viene. */
+/* "Antes de abrir": lo que viene ({ icono, titulo, textos }: estado o sala; el título, texto plano). */
 function abreALas(d) {
-  const primero = d.faltantes.length ? d.faltantes.filter(f => f.desde === d.faltantes[0].desde && f.hasta === d.faltantes[0].hasta) : [];
-  return estado({
-    icono: ICONO.reloj, titulo: `Abre a las ${escH(apertura(d.hora_apertura))}`, grande: false,
+  const primero = primerTurno(d);
+  return {
+    icono: ICONO.reloj, titulo: `Abre a las ${apertura(d.hora_apertura)}`,
     textos: `<p class="mr-chico"><b style="color:var(--tinta)">${cuantosClientes(d.con_turno)}</b> ${d.con_turno === 1 ? "tiene" : "tienen"} turno hoy.`
       + (primero.length ? ` El primero, de ${escH(horario(primero[0]))}: ${cuantosClientes(primero.length)}.` : "") + `</p>`,
-  });
+  };
 }
 
 function hoyNoHayExpo(d) {
   const proximo = (d.dias || []).find(x => x > d.hoy);
-  return estado({
-    icono: ICONO.reloj, titulo: "Hoy no hay expo", grande: false,
+  return {
+    icono: ICONO.reloj, titulo: "Hoy no hay expo",
     // "empieza" si todavía no hubo ningún día; "sigue" si ya hubo
     textos: `<p class="mr-chico">${proximo ? `La expo ${escH(d.anio)} ${d.dias[0] > d.hoy ? "empieza" : "sigue"} el ${escH(diaLargo(proximo))}.` : `La expo ${escH(d.anio)} ya terminó sus días.`}</p>`,
-  });
+  };
+}
+
+/* Los datos de la sala en la compu (texto plano: los escapa sala()). */
+const primerTurno = d => d.faltantes.length ? d.faltantes.filter(f => f.desde === d.faltantes[0].desde && f.hasta === d.faltantes[0].hasta) : [];
+function datosDeAyer(d) {
+  if (!d.ayer) return [];
+  const cuando = diasEntre(d.ayer.dia, d.hoy) === 1 ? "ayer" : "el " + diaLargo(d.ayer.dia);
+  return [
+    { valor: d.ayer.clientes, rotulo: `clientes ${cuando}` },
+    { valor: d.ayer.personas, rotulo: `personas ${cuando}` },
+  ];
+}
+function datosAntesDeAbrir(d) {
+  const primero = primerTurno(d);
+  const faltan = Math.max(1, minutosDe(d.hora_apertura) - minutosAR());
+  return [
+    { valor: duracion(faltan), rotulo: "para abrir las puertas" },
+    { valor: d.con_turno, rotulo: "clientes con turno hoy" },
+    ...(primero.length ? [{ valor: primero.length, rotulo: `en el primer turno, de ${horario(primero[0])}` }] : []),
+    ...datosDeAyer(d),
+  ];
+}
+function datosHoyNoHayExpo(d) {
+  const proximo = (d.dias || []).find(x => x > d.hoy);
+  return [
+    ...(proximo ? [{ valor: diaCorto(proximo), rotulo: `${d.dias[0] > d.hoy ? "empieza" : "sigue"} la expo ${d.anio}` }] : []),
+    { valor: (d.dias || []).length, rotulo: `días de expo ${d.anio}` },
+    ...datosDeAyer(d),
+  ];
 }
 
 /* "Ayer · martes 14" con las dos cifras del último día. */

@@ -14,6 +14,15 @@ const texto = (page) => page.textContent('#app');
 const lineas = (page, sel) => page.$$eval(sel, (els) => els.map((e) => e.textContent.trim()));
 const cerrar = (page) => page.context().close();
 
+// Espera a que pase algo que no depende de la página (por ejemplo, que ya
+// haya salido un pedido: puede salir mientras carga, antes de esperarlo).
+async function hasta(condicion, ms = 10000) {
+  for (const fin = Date.now() + ms; !condicion(); ) {
+    if (Date.now() > fin) throw new Error('hasta(): no pasó');
+    await new Promise((ok) => setTimeout(ok, 20));
+  }
+}
+
 test(`${ANCHO} px · sin registrar: razón social arriba, contador con 2 elegido y el botón repite la cantidad`, async () => {
   const { page, errores } = await abrir({ ancho: ANCHO, hash: '#t=' + TOKEN, rpc: { expo_ver_invitado: () => enCurso() } });
   await page.waitForSelector('#principal');
@@ -501,7 +510,7 @@ test(`${ANCHO} px · una corrección vieja que la cola ya mandó llega antes que
   let soltar;
   const demorada = new Promise((ok) => { soltar = ok; });
   const aplicadas = [];
-  const { page } = await abrir({
+  const { page, llamadas } = await abrir({
     ancho: ANCHO, hash: '#t=' + TOKEN, local: { expoCola: [vieja] },
     rpc: {
       expo_ver_invitado: () => enCurso({ visita_hoy: { llegada, cantidad: 2 } }),
@@ -512,7 +521,7 @@ test(`${ANCHO} px · una corrección vieja que la cola ya mandó llega antes que
       },
     },
   });
-  await page.waitForRequest((r) => r.url().endsWith('/rpc/expo_corregir_cantidad'));   // la vieja, en camino
+  await hasta(() => llamadas.some((l) => l.fn === 'expo_corregir_cantidad'));   // la vieja, en camino (sale mientras carga)
   await page.click('#corregir');
   await page.click('input[value="4"]');
   await page.click('#principal');
@@ -528,7 +537,7 @@ test(`${ANCHO} px · un "no vamos" que la cola ya mandó llega antes que el "sí
   let soltar;
   const demorado = new Promise((ok) => { soltar = ok; });
   const aplicadas = [];
-  const { page } = await abrir({
+  const { page, llamadas } = await abrir({
     ancho: ANCHO, hash: '#t=' + TOKEN, local: { expoCola: [novamos] },
     rpc: {
       expo_ver_invitado: () => previa(),
@@ -539,7 +548,7 @@ test(`${ANCHO} px · un "no vamos" que la cola ya mandó llega antes que el "sí
       },
     },
   });
-  await page.waitForRequest((r) => r.url().endsWith('/rpc/expo_confirmar'));   // el "no vamos", en camino
+  await hasta(() => llamadas.some((l) => l.fn === 'expo_confirmar'));   // el "no vamos", en camino (sale mientras carga)
   await page.click('#sivamos');
   await page.click('#principal');
   await page.waitForTimeout(300);

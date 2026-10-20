@@ -82,14 +82,16 @@ export function previa(extra = {}) {
    una fecha, para arrancar en ese momento (por ejemplo, hoy a las 10:42).
    auth: { 'token?grant_type=pkce': (cuerpo) => respuesta, ... } responde la
    autenticación de Supabase (el login de recepción); authorize(url) responde
-   el "Entrar con Google" (devuelve a dónde vuelve).
+   el "Entrar con Google" (devuelve a dónde vuelve). fuentes: true deja bajar
+   las tipografías de Google (para capturas que se vean como la app real).
+   quieto: true abre con "reducir movimiento" activado.
    sw: true deja andar el service worker (se abre en localhost: lo necesita).
    almacenamiento: 'lleno' (no deja guardar) o 'bloqueado' (ni leer: el
    navegador de algunos lectores de QR).
    antes(page): corre en el mismo sitio antes de abrir la app (por ejemplo,
    para dejar cachés de otra app).
    Devuelve la página y las llamadas que hizo ({ fn, args }). */
-export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = null, oscuro = false, reloj = false, sw = false, antes = null, almacenamiento = null, auth = {}, authorize = null } = {}) {
+export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = null, oscuro = false, reloj = false, sw = false, antes = null, almacenamiento = null, auth = {}, authorize = null, fuentes = false, quieto = false } = {}) {
   if (!ancho) throw new Error("abrir(): falta el ancho (cada test dice a qué ancho mira)");
   await arrancar();
   const contexto = await navegador.newContext({
@@ -98,12 +100,15 @@ export async function abrir({ ancho, alto = 800, hash = '', rpc = {}, local = nu
     locale: 'es-AR',
     timezoneId: 'America/Argentina/Buenos_Aires',
     colorScheme: oscuro ? 'dark' : 'light',
+    reducedMotion: quieto ? 'reduce' : 'no-preference',
   });
   if (reloj) await contexto.clock.install(reloj === true ? {} : { time: reloj });   // el test maneja el tiempo (page.clock.fastForward)
   const llamadas = [];
   const veces = {};
-  await contexto.route('https://fonts.googleapis.com/**', (r) => r.abort());
-  await contexto.route('https://fonts.gstatic.com/**', (r) => r.abort());
+  if (!fuentes) {   // los tests no dependen de internet: sin las tipografías de Google
+    await contexto.route('https://fonts.googleapis.com/**', (r) => r.abort());
+    await contexto.route('https://fonts.gstatic.com/**', (r) => r.abort());
+  }
   await contexto.route('**/rest/v1/rpc/**', async (ruta) => {
     const fn = ruta.request().url().split('/rpc/')[1];
     const args = JSON.parse(ruta.request().postData() || '{}');
@@ -196,6 +201,11 @@ export function desbordes(page) {
     const fuera = [];
     if (document.documentElement.scrollWidth > ancho) fuera.push(`la página scrollea de costado (${document.documentElement.scrollWidth} > ${ancho})`);
     for (const el of document.querySelectorAll('#app *')) {
+      if (el.closest('svg') && el.tagName.toLowerCase() !== 'svg') continue;   // lo de adentro de un dibujo lo recorta el dibujo: se mide el svg
+      // lo que recorta un contenedor (overflow hidden) que está dentro de la pantalla no se ve afuera
+      let padre = el.parentElement;
+      while (padre && padre.id !== 'app' && getComputedStyle(padre).overflow !== 'hidden') padre = padre.parentElement;
+      if (padre && padre.id !== 'app') { const c = padre.getBoundingClientRect(); if (c.right <= ancho + 0.5 && c.left >= -0.5) continue; }
       const r = el.getBoundingClientRect();
       if (r.width && (r.right > ancho + 0.5 || r.left < -0.5)) fuera.push(`${el.tagName.toLowerCase()}.${el.className} (${Math.round(r.left)}–${Math.round(r.right)})`);
     }
