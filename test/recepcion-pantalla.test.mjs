@@ -588,17 +588,34 @@ test('320 px · la hoja con un nombre largo: la × no se achica ni se va, y el C
   await cerrar(page);
 });
 
-test(`${ESCRITORIO} px · en la compu, sin datos para mostrar, afiche y mosaico: entrar con Google y "No hay una expo abierta" (con Salir)`, async () => {
+// Cuántos puntos de partículas hay dibujados en la sala: píxeles opacos y
+// oscuros (o de color) sobre el marfil. Si nadie dibujó, el lienzo está
+// transparente y da 0. `zona` mira solo la franja de la palabra (de 25 % a 55 % del alto).
+const puntosDeLaSala = (page, zona = false) => page.evaluate((zona) => {
+  const cv = document.querySelector('.sala-recepcion canvas');
+  const desde = zona ? Math.floor(cv.height * 0.25) : 0, hasta = zona ? Math.floor(cv.height * 0.55) : cv.height;
+  const d = cv.getContext('2d').getImageData(0, desde, cv.width, hasta - desde).data;
+  let n = 0;
+  for (let i = 0; i < d.length; i += 16) if (d[i + 3] > 200 && (d[i] < 120 || d[i + 2] < 120)) n++;
+  return n;
+}, zona);
+
+test(`${ESCRITORIO} px · en la compu, sin datos para mostrar, la sala: "Expo Mooving" en partículas, entrar con Google y "No hay una expo abierta" (con Salir)`, async () => {
   let { page } = await abrir({ ancho: ESCRITORIO, hash: '#recepcion' });
-  await page.waitForSelector('.mosaico');
-  assert.equal(await page.textContent('.afiche-titulo'), 'Entrá con tu cuenta de Google');
-  assert.equal(await page.$$eval('.mosaico .ficha', (l) => l.length), 6, 'el mosaico no tiene sus seis bloques');
-  assert.ok(await page.$('.afiche #google'), 'el botón de Google no está en el afiche');
+  await page.waitForSelector('.sala-recepcion');
+  assert.equal(await page.textContent('.sala-titulo'), 'Entrá con tu cuenta de Google');
+  assert.ok(await page.$('.sala-recepcion #google'), 'el botón de Google no está en la sala');
+  assert.equal(await page.getAttribute('.sala-recepcion', 'data-sala'), 'Expo Mooving', 'sin haber visto ninguna expo no hay año');
+  await page.waitForFunction(() => document.querySelector('.sala-recepcion canvas').width !== 300);   // ya se armó
+  await page.waitForTimeout(1500);
+  assert.ok(await puntosDeLaSala(page) > 300, 'no se dibujaron las partículas');
   await cerrar(page);
 
   ({ page } = await abrirRecepcion({ ancho: ESCRITORIO, rpc: { expo_recepcion: () => ({ estado: 'sin_edicion', hoy: hoy() }) } }));
-  await page.waitForSelector('.mosaico');
+  await page.waitForSelector('.sala-recepcion');
   assert.match(await texto(page), /No hay una expo abierta/);
+  await page.waitForTimeout(1500);
+  assert.ok(await puntosDeLaSala(page) > 300, 'no se dibujaron las partículas en la recepción');
   assert.equal(await page.isVisible('.pie-salir'), false, 'quedan dos "Salir"');
   await page.click('[data-salir]');
   await page.waitForSelector('#google');
@@ -606,19 +623,47 @@ test(`${ESCRITORIO} px · en la compu, sin datos para mostrar, afiche y mosaico:
   await cerrar(page);
 });
 
-test(`${CELULAR} px · en el celular, sin datos, el estado de siempre (sin mosaico)`, async () => {
+test(`${ESCRITORIO} px · la sala lleva el año de la expo, y antes de entrar el último que se vio en esta compu`, async () => {
+  const { page } = await abrirRecepcion({ ancho: ESCRITORIO, rpc: { expo_recepcion: () => tablero({ es_dia: false, dias: [dia(2), dia(3)], anio: 2027 }) } });
+  await page.waitForSelector('.sala-recepcion');
+  assert.equal(await page.getAttribute('.sala-recepcion', 'data-sala'), 'Expo Mooving 2027');
+  assert.equal(await page.textContent('.sala-recepcion .mr-oculto'), 'Expo Mooving 2027', 'sin texto para el lector de pantalla');
+  await page.click('[data-salir]');
+  await page.waitForSelector('#google');
+  assert.equal(await page.getAttribute('.sala-recepcion', 'data-sala'), 'Expo Mooving 2027');
+  await cerrar(page);
+});
+
+test(`${ESCRITORIO} px · la sala es clara también con la compu en modo oscuro`, async () => {
+  const { page } = await abrir({ ancho: ESCRITORIO, hash: '#recepcion', oscuro: true });
+  await page.waitForSelector('.sala-recepcion');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
+  assert.equal(await page.$eval('.sala-titulo', (t) => getComputedStyle(t).color), 'rgb(23, 20, 29)', 'el título no es oscuro sobre el marfil');
+  await cerrar(page);
+});
+
+test(`${ESCRITORIO} px · con "reducir movimiento", la sala aparece armada y quieta`, async () => {
+  const { page } = await abrir({ ancho: ESCRITORIO, hash: '#recepcion', quieto: true });
+  await page.waitForSelector('.sala-recepcion');
+  await page.waitForFunction(() => document.querySelector('.sala-recepcion canvas').width !== 300);   // ya se armó (300 es el ancho de un lienzo sin tocar)
+  await page.waitForTimeout(100);   // sin animación: armada desde el primer dibujo
+  assert.ok(await puntosDeLaSala(page, true) > 300, 'no está armada en su lugar');
+  await cerrar(page);
+});
+
+test(`${CELULAR} px · en el celular, sin datos, el estado de siempre (sin la sala)`, async () => {
   const { page } = await abrirRecepcion({ ancho: CELULAR, rpc: { expo_recepcion: () => ({ estado: 'sin_edicion', hoy: hoy() }) } });
   await page.waitForSelector('text=No hay una expo abierta');
-  assert.equal(await page.$('.mosaico'), null);
+  assert.equal(await page.$('.sala-recepcion'), null);
   assert.equal(await page.isVisible('.pie-salir'), true);
   await cerrar(page);
 });
 
 for (const ancho of [768, 1024, ESCRITORIO]) {
-  test(`${ancho} px · afiche y mosaico: nada se corta`, async () => {
+  test(`${ancho} px · la sala: nada se corta`, async () => {
     for (const op of [{ hash: '#recepcion' }, { hash: '#recepcion', local: conSesion, rpc: { expo_recepcion: () => tablero({ es_dia: false, dias: [dia(2), dia(3)] }) } }]) {
       const { page } = await abrir({ ancho, alto: 700, ...op });
-      await page.waitForSelector('.mosaico');
+      await page.waitForSelector('.sala-recepcion');
       assert.deepEqual(await desbordes(page), []);
       await cerrar(page);
     }
